@@ -14,7 +14,7 @@ func TestLoadUsesProductionSafeDefaults(t *testing.T) {
 	if cfg.DataDir != "/var/lib/supadata" {
 		t.Fatalf("DataDir = %q, want /var/lib/supadata", cfg.DataDir)
 	}
-	if cfg.PublicHost != "13.140.160.208" {
+	if cfg.PublicHost != "supabase.craftmatrix.org" {
 		t.Fatalf("PublicHost = %q, want configured production default", cfg.PublicHost)
 	}
 }
