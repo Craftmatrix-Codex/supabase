@@ -2,7 +2,7 @@
 
 ## Current execution state
 
-The Go rewrite is being developed beside the existing Node control plane. The existing production path remains the rollback path until the Go implementation passes the full compatibility and deployment gates.
+The Go rewrite remains the Supabase-compatible data plane. The Laravel application at `apps/studio-laravel` now replaces the Studio server/control-plane runtime while reusing the existing React/TanStack UI build. The previous Node Studio deployment remains the rollback path until the Laravel control-plane compatibility matrix is complete.
 
 ## Verified
 
@@ -27,7 +27,12 @@ The Go rewrite is being developed beside the existing Node control plane. The ex
 - A real Playwright run against `https://go-alpha.craftmatrix.org/project/default` passed after the control-route and public-URL fixes: zero failed responses, zero console/page errors, visible native Studio project content, public endpoint `https://go-alpha.craftmatrix.org` (no localhost fallback), and `Advisor found no issues`.
 - The unified runtime entrypoint pins native Studio to port 8082 even when a platform injects `PORT=8080`; the production image includes `curl` because Coolify's generated Docker healthcheck requires it.
 - A clean BuildKit single-image build passed: native Studio Vite/TanStack build, Go test/race/vet/build stage, NGINX, and runtime entrypoint. Image size reported by Docker is 433,475,516 bytes.
-- Image smoke passed through NGINX for `/health`, `/auth/v1/health`, and authenticated `/api/projects`; `nginx -t` passed. The disposable container was removed.
+- The Laravel Studio server/control-plane rewrite now lives under `apps/studio-laravel`; it uses PHP-FPM and NGINX, contains no source Blade views, and serves the existing Supabase React/TanStack client artifact built by Vite.
+- Laravel feature/control-plane contracts cover authenticated SPA fallback, project/profile/bootstrap metadata, project `ref` identifiers, pg-meta query empty-state rows, content/count, Storage/vector buckets, Auth users, Edge Functions, analytics/logs, Log Drains, settings, lints, API keys, GitHub authorization, UTC time, PostgREST config/readiness, and JSON API 404s.
+- Laravel regression suite passed with 16 tests and 97 assertions under alpha-style `SUPADATA_STUDIO_AUTH_USERNAME/PASSWORD` variables; the unified image build passed Go test/race/vet, React/Vite build, Composer production discovery, NGINX, and runtime health gates.
+- Container Playwright smoke through NGINX/PHP-FPM passed with zero failed responses, zero console errors, zero page errors, native `Default Project | Supabase` title, and authenticated `/project/default` rendering.
+- Live alpha `https://go-alpha.craftmatrix.org` was redeployed serially through Coolify; final deployment `tggljpaqxh98baormbxmnq0u` finished and application read-back was `running:healthy`.
+- Final live serial Playwright matrix covered 14 key Studio routes: all returned HTTP 200, all had zero page errors, and all had zero console errors after the project-list and pg-meta response-shape fixes. Five `ERR_ABORTED` entries were requests cancelled as the test intentionally navigated away from Users/Functions; no HTTP 4xx/5xx remained.
 
 ## Active work
 
