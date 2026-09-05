@@ -20,9 +20,9 @@ class StudioControlPlaneTest extends TestCase
         $this->withBasicAuth('studio', 'password')
             ->getJson('/api/platform/projects')
             ->assertOk()
-            ->assertJsonPath('projects.0.id', 1)
-            ->assertJsonPath('projects.0.ref', 'default')
-            ->assertJsonPath('projects.0.name', 'Default Project');
+            ->assertJsonPath('0.id', 1)
+            ->assertJsonPath('0.ref', 'default')
+            ->assertJsonPath('0.name', 'Default Project');
     }
 
     public function test_current_project_is_durable_in_the_http_contract(): void

@@ -161,7 +161,7 @@ class StudioController
 
     public function projects(): JsonResponse
     {
-        return response()->json(['projects' => config('studio.projects', [])]);
+        return response()->json(config('studio.projects', []));
     }
 
     public function currentProject(): JsonResponse
