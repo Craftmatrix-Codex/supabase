@@ -23,6 +23,8 @@ The Go rewrite is being developed beside the existing Node control plane. The ex
 - REST has parameterized SELECT/INSERT/UPSERT/PATCH/DELETE builders, `in`/`not`/`or` filter slices, and API-key/JWT gating; handler tests passed with sqlmock and live PostgreSQL SELECT integration.
 - Storage has API-key authorization, service/user mutation checks, safe bucket/object paths, bounded uploads, list/download/delete handlers, and an S3-compatible backend. A disposable SeaweedFS 3.80 put/get/list/delete round-trip passed.
 - Realtime has API-key/JWT-gated `/realtime/v1/websocket` handling, Phoenix join/leave/heartbeat replies, public-topic authorization, WebSocket tests, and NGINX upgrade routing. Broadcast, presence, database changes, and exact protocol parity remain.
+- Two-project isolation coverage now verifies hostname-routed Auth scopes, separate REST/RPC database connections, RLS project claims, Storage positive/cross-project reads, Realtime project topic/token boundaries, and rejection of project-bound JWTs on the wrong project.
+- The unified runtime entrypoint pins native Studio to port 8082 even when a platform injects `PORT=8080`; the production image includes `curl` because Coolify's generated Docker healthcheck requires it.
 - A clean BuildKit single-image build passed: native Studio Vite/TanStack build, Go test/race/vet/build stage, NGINX, and runtime entrypoint. Image size reported by Docker is 433,475,516 bytes.
 - Image smoke passed through NGINX for `/health`, `/auth/v1/health`, and authenticated `/api/projects`; `nginx -t` passed. The disposable container was removed.
 
