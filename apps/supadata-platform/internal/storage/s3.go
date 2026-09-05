@@ -36,6 +36,20 @@ func NewS3Store(config S3Config) (*S3Store, error) {
 	return &S3Store{client: client}, nil
 }
 
+func (s *S3Store) EnsureBucket(ctx context.Context, bucket string) error {
+	if err := validateBucket(bucket); err != nil {
+		return err
+	}
+	exists, err := s.client.BucketExists(ctx, bucket)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	return s.client.MakeBucket(ctx, bucket, minio.MakeBucketOptions{Region: "us-east-1"})
+}
+
 func (s *S3Store) Put(ctx context.Context, bucket, key, contentType string, body io.Reader, size int64) (ObjectInfo, error) {
 	result, err := s.client.PutObject(ctx, bucket, key, body, size, minio.PutObjectOptions{ContentType: contentType})
 	if err != nil {

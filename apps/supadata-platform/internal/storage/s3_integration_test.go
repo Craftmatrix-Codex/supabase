@@ -6,8 +6,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/minio/minio-go/v7"
 )
 
 func TestS3StoreRoundTrip(t *testing.T) {
@@ -22,7 +20,7 @@ func TestS3StoreRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	bucket := "supadata-it"
 	_ = store.client.RemoveBucket(ctx, bucket)
-	if err := store.client.MakeBucket(ctx, bucket, minio.MakeBucketOptions{Region: "us-east-1"}); err != nil {
+	if err := store.EnsureBucket(ctx, bucket); err != nil {
 		t.Fatal(err)
 	}
 	defer store.client.RemoveBucket(ctx, bucket)
