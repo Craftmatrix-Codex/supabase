@@ -8,7 +8,7 @@ go_pid=$!
 
 (
   cd /app/apps/studio
-  exec node server.js
+  exec env PORT=8082 node server.js
 ) &
 studio_pid=$!
 
