@@ -25,6 +25,12 @@ class StudioController
         ], 404);
     }
 
+    public function apiRest(string $project): JsonResponse
+    {
+        $this->assertProject($project);
+        return response()->json([]);
+    }
+
     public function aiSqlCheckApiKey(): JsonResponse
     {
         return response()->json(['hasKey' => false]);

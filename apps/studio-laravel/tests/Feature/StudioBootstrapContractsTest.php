@@ -37,6 +37,9 @@ class StudioBootstrapContractsTest extends TestCase
             ->assertOk()
             ->assertJsonStructure(['db_anon_role', 'db_extra_search_path', 'db_schema', 'jwt_secret', 'max_rows', 'role_claim_key'])
             ->assertJsonPath('db_schema', 'public');
+        $this->auth()->get('/api/platform/projects/default/api/rest')
+            ->assertOk()->assertJson([]);
+        $this->auth()->head('/api/platform/projects/default/api/rest')->assertOk();
         $this->auth()->get('/api/platform/projects/default/analytics/endpoints/logs.all')
             ->assertOk()->assertJson(['result' => []]);
     }
