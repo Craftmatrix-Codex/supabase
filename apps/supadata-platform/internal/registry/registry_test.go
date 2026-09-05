@@ -2,9 +2,12 @@ package registry
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/project"
 )
 
 func TestRegistryPersistsProjectsAndCurrentSelection(t *testing.T) {
@@ -100,6 +103,60 @@ func TestRegistryPersistsProjectResourceScopes(t *testing.T) {
 	}
 	if alpha.Scope.PublicURL != "https://alpha.supabase.example.com" {
 		t.Fatalf("alpha public URL = %q", alpha.Scope.PublicURL)
+	}
+}
+
+type projectProvisionerStub struct {
+	err   error
+	calls []project.Project
+}
+
+func (p *projectProvisionerStub) ProvisionProject(_ context.Context, value project.Project) error {
+	p.calls = append(p.calls, value)
+	return p.err
+}
+
+func TestRegistryProvisionerMarksProjectReady(t *testing.T) {
+	provisioner := &projectProvisionerStub{}
+	store, err := New(Options{DataDir: t.TempDir(), Provisioner: provisioner})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	created, err := store.CreateProject(context.Background(), "Ready", "ready")
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	if created.Status != "ready" || len(provisioner.calls) != 1 {
+		t.Fatalf("created project = %+v, provisioner calls = %d", created, len(provisioner.calls))
+	}
+	resolved, err := store.ResolveProject(context.Background(), "ready")
+	if err != nil {
+		t.Fatalf("ResolveProject() error = %v", err)
+	}
+	if resolved.Status != "ready" {
+		t.Fatalf("persisted status = %q, want ready", resolved.Status)
+	}
+}
+
+func TestRegistryProvisionerPersistsFailure(t *testing.T) {
+	provisioner := &projectProvisionerStub{err: errors.New("database scope unavailable")}
+	store, err := New(Options{DataDir: t.TempDir(), Provisioner: provisioner})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	created, err := store.CreateProject(context.Background(), "Failed", "failed")
+	if err == nil {
+		t.Fatal("CreateProject() unexpectedly succeeded")
+	}
+	if created.Status != "failed" || created.Error == "" {
+		t.Fatalf("failed project = %+v", created)
+	}
+	resolved, resolveErr := store.ResolveProject(context.Background(), "failed")
+	if resolveErr != nil {
+		t.Fatalf("ResolveProject() error = %v", resolveErr)
+	}
+	if resolved.Status != "failed" || resolved.Error == "" {
+		t.Fatalf("persisted failure = %+v", resolved)
 	}
 }
 
