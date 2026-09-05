@@ -18,7 +18,8 @@ import (
 var projectIDPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 type Options struct {
-	DataDir string
+	DataDir    string
+	PublicHost string
 }
 
 type state struct {
@@ -29,6 +30,7 @@ type state struct {
 type Store struct {
 	registryPath string
 	projectsDir  string
+	publicHost   string
 	mu           sync.Mutex
 }
 
@@ -42,6 +44,7 @@ func New(options Options) (*Store, error) {
 	return &Store{
 		registryPath: filepath.Join(options.DataDir, "registry.json"),
 		projectsDir:  filepath.Join(options.DataDir, "projects"),
+		publicHost:   strings.TrimSpace(options.PublicHost),
 	}, nil
 }
 
@@ -60,6 +63,10 @@ func (s *Store) CreateProject(_ context.Context, name, requestedID string) (proj
 	if !projectIDPattern.MatchString(id) {
 		return project.Project{}, errors.New("id must be lowercase kebab-case")
 	}
+	scope, err := project.BuildScope(id, s.publicHost)
+	if err != nil {
+		return project.Project{}, fmt.Errorf("build project scope: %w", err)
+	}
 
 	current, err := s.readLocked()
 	if err != nil {
@@ -75,6 +82,7 @@ func (s *Store) CreateProject(_ context.Context, name, requestedID string) (proj
 		Name:      cleanName,
 		Status:    "registered",
 		Current:   len(current.Projects) == 0,
+		Scope:     scope,
 		CreatedAt: time.Now().UTC(),
 	}
 	current.Projects = append(current.Projects, created)

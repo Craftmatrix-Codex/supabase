@@ -9,7 +9,7 @@ import (
 )
 
 func (r *PostgresRepository) RefreshSession(ctx context.Context, oldHash, newHash string, expiresAt time.Time) (User, Session, error) {
-	transaction, err := r.db.BeginTx(ctx, nil)
+	transaction, err := r.databaseForContext(ctx).BeginTx(ctx, nil)
 	if err != nil {
 		return User{}, Session{}, fmt.Errorf("begin refresh transaction: %w", err)
 	}

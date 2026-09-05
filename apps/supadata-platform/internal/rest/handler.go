@@ -11,7 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/database"
 	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/jwt"
+	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/project"
 )
 
 type APIKeyConfig struct {
@@ -74,7 +76,7 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 		h.handleMutation(response, request, claims)
 		return
 	}
-	if h.database == nil {
+	if h.databaseForContext(request.Context()) == nil {
 		writeJSON(response, http.StatusServiceUnavailable, map[string]string{"error": "database unavailable"})
 		return
 	}
@@ -102,7 +104,7 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 }
 
 func (h *Handler) handleRPC(response http.ResponseWriter, request *http.Request, claims jwt.Claims) {
-	if h.database == nil {
+	if h.databaseForContext(request.Context()) == nil {
 		writeJSON(response, http.StatusServiceUnavailable, map[string]string{"error": "database unavailable"})
 		return
 	}
@@ -134,9 +136,20 @@ func (h *Handler) handleRPC(response http.ResponseWriter, request *http.Request,
 	writeJSON(response, http.StatusOK, result)
 }
 
+func (h *Handler) databaseForContext(ctx context.Context) *sql.DB {
+	if databaseConnection, ok := database.ConnectionFromContext(ctx); ok {
+		return databaseConnection
+	}
+	return h.database
+}
+
 func (h *Handler) queryRows(ctx context.Context, claims jwt.Claims, query Query) ([]map[string]any, error) {
+	databaseConnection := h.databaseForContext(ctx)
+	if databaseConnection == nil {
+		return nil, errors.New("database unavailable")
+	}
 	if claims.Subject == "" {
-		rows, err := h.database.QueryContext(ctx, query.SQL, query.Args...)
+		rows, err := databaseConnection.QueryContext(ctx, query.SQL, query.Args...)
 		if err != nil {
 			return nil, err
 		}
@@ -144,7 +157,7 @@ func (h *Handler) queryRows(ctx context.Context, claims jwt.Claims, query Query)
 		return rowsToJSON(rows)
 	}
 
-	tx, err := h.database.BeginTx(ctx, nil)
+	tx, err := databaseConnection.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -159,14 +172,21 @@ func (h *Handler) queryRows(ctx context.Context, claims jwt.Claims, query Query)
 	if err != nil {
 		return nil, err
 	}
-	for _, setting := range []struct {
+	settings := []struct {
 		key   string
 		value string
 	}{
 		{"request.jwt.claims", string(claimsJSON)},
 		{"request.jwt.claim.sub", claims.Subject},
 		{"request.jwt.claim.role", claims.Role},
-	} {
+	}
+	if scope, ok := project.ScopeFromContext(ctx); ok {
+		settings = append(settings, struct {
+			key   string
+			value string
+		}{"request.jwt.claim.project_id", scope.ID})
+	}
+	for _, setting := range settings {
 		var ignored string
 		if err := tx.QueryRowContext(ctx, "select set_config($1, $2, true)", setting.key, setting.value).Scan(&ignored); err != nil {
 			return nil, err
@@ -199,7 +219,7 @@ func (h *Handler) queryRows(ctx context.Context, claims jwt.Claims, query Query)
 }
 
 func (h *Handler) handleMutation(response http.ResponseWriter, request *http.Request, claims jwt.Claims) {
-	if h.database == nil {
+	if h.databaseForContext(request.Context()) == nil {
 		writeJSON(response, http.StatusServiceUnavailable, map[string]string{"error": "database unavailable"})
 		return
 	}
@@ -243,7 +263,7 @@ func (h *Handler) handleMutation(response http.ResponseWriter, request *http.Req
 }
 
 func (h *Handler) handleInsert(response http.ResponseWriter, request *http.Request, claims jwt.Claims) {
-	if h.database == nil {
+	if h.databaseForContext(request.Context()) == nil {
 		writeJSON(response, http.StatusServiceUnavailable, map[string]string{"error": "database unavailable"})
 		return
 	}

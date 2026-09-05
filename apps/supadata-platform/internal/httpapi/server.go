@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/auth"
+	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/database"
 	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/project"
 )
 
@@ -68,6 +69,7 @@ type ServerOptions struct {
 	AllowedOrigin       string
 	Registry            Registry
 	ProjectResolver     ProjectResolver
+	DatabaseResolver    database.Resolver
 	RequireProjectScope bool
 	Auth                AuthService
 	APIKeys             APIKeyConfig
@@ -82,6 +84,7 @@ type Server struct {
 	allowedOrigin       string
 	registry            Registry
 	projectResolver     ProjectResolver
+	databaseResolver    database.Resolver
 	requireProjectScope bool
 	auth                AuthService
 	apiKeys             APIKeyConfig
@@ -96,7 +99,7 @@ func NewServer(options ServerOptions) *Server {
 	if origin == "" {
 		origin = "*"
 	}
-	return &Server{token: options.Token, allowedOrigin: origin, registry: options.Registry, projectResolver: options.ProjectResolver, requireProjectScope: options.RequireProjectScope, auth: options.Auth, apiKeys: options.APIKeys, authSettings: options.AuthSettings, rest: options.REST, storage: options.Storage, realtime: options.Realtime}
+	return &Server{token: options.Token, allowedOrigin: origin, registry: options.Registry, projectResolver: options.ProjectResolver, databaseResolver: options.DatabaseResolver, requireProjectScope: options.RequireProjectScope, auth: options.Auth, apiKeys: options.APIKeys, authSettings: options.AuthSettings, rest: options.REST, storage: options.Storage, realtime: options.Realtime}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -112,14 +115,19 @@ func (s *Server) serveHTTP(response http.ResponseWriter, request *http.Request) 
 		response.WriteHeader(http.StatusNoContent)
 		return
 	}
+	if isProjectScopedPath(request.URL.Path) {
+		scopedRequest, ok := s.withProjectScope(response, request)
+		if !ok {
+			return
+		}
+		request = scopedRequest
+	}
 	if strings.HasPrefix(request.URL.Path, "/rest/v1/") {
 		if s.rest == nil {
 			writeJSON(response, http.StatusServiceUnavailable, map[string]string{"error": "REST service unavailable"})
 			return
 		}
-		if scopedRequest, ok := s.withProjectScope(response, request); ok {
-			s.rest.ServeHTTP(response, scopedRequest)
-		}
+		s.rest.ServeHTTP(response, request)
 		return
 	}
 	if strings.HasPrefix(request.URL.Path, "/storage/v1/") {
@@ -127,9 +135,7 @@ func (s *Server) serveHTTP(response http.ResponseWriter, request *http.Request) 
 			writeJSON(response, http.StatusServiceUnavailable, map[string]string{"error": "storage service unavailable"})
 			return
 		}
-		if scopedRequest, ok := s.withProjectScope(response, request); ok {
-			s.storage.ServeHTTP(response, scopedRequest)
-		}
+		s.storage.ServeHTTP(response, request)
 		return
 	}
 	if strings.HasPrefix(request.URL.Path, "/realtime/v1/") {
@@ -137,9 +143,7 @@ func (s *Server) serveHTTP(response http.ResponseWriter, request *http.Request) 
 			writeJSON(response, http.StatusServiceUnavailable, map[string]string{"error": "realtime service unavailable"})
 			return
 		}
-		if scopedRequest, ok := s.withProjectScope(response, request); ok {
-			s.realtime.ServeHTTP(response, scopedRequest)
-		}
+		s.realtime.ServeHTTP(response, request)
 		return
 	}
 	if request.Method == http.MethodGet && request.URL.Path == "/health" {
@@ -338,8 +342,29 @@ func (s *Server) serveHTTP(response http.ResponseWriter, request *http.Request) 
 	}
 }
 
+func isProjectScopedPath(path string) bool {
+	if strings.HasPrefix(path, "/rest/v1/") || strings.HasPrefix(path, "/storage/v1/") || strings.HasPrefix(path, "/realtime/v1/") {
+		return true
+	}
+	return strings.HasPrefix(path, "/auth/v1/") && path != "/auth/v1/health"
+}
+
 func (s *Server) withProjectScope(response http.ResponseWriter, request *http.Request) (*http.Request, bool) {
 	projectID := strings.TrimSpace(request.Header.Get("X-Supadata-Project"))
+	if projectID == "" && s.projectResolver != nil {
+		if hostResolver, ok := s.projectResolver.(interface {
+			ResolveProjectHost(context.Context, string) (Project, error)
+		}); ok {
+			resolved, err := hostResolver.ResolveProjectHost(request.Context(), request.Host)
+			if err == nil {
+				return s.attachProjectScope(response, request, resolved)
+			}
+			if errors.Is(err, project.ErrNotFound) {
+				writeJSON(response, http.StatusNotFound, map[string]string{"error": "project not found"})
+				return nil, false
+			}
+		}
+	}
 	if projectID == "" {
 		if s.requireProjectScope {
 			writeJSON(response, http.StatusBadRequest, map[string]string{"error": "project scope is required"})
@@ -360,7 +385,20 @@ func (s *Server) withProjectScope(response http.ResponseWriter, request *http.Re
 		writeJSON(response, http.StatusBadGateway, map[string]string{"error": "project resolver failed"})
 		return nil, false
 	}
-	return request.WithContext(project.WithScope(request.Context(), resolved)), true
+	return s.attachProjectScope(response, request, resolved)
+}
+
+func (s *Server) attachProjectScope(response http.ResponseWriter, request *http.Request, resolved Project) (*http.Request, bool) {
+	ctx := project.WithScope(request.Context(), resolved)
+	if s.databaseResolver == nil {
+		return request.WithContext(ctx), true
+	}
+	databaseConnection, err := s.databaseResolver.Resolve(request.Context(), resolved)
+	if err != nil {
+		writeJSON(response, http.StatusServiceUnavailable, map[string]string{"error": "project database unavailable"})
+		return nil, false
+	}
+	return request.WithContext(database.WithConnection(ctx, databaseConnection)), true
 }
 
 func (s *Server) isServiceRoleRequest(request *http.Request) bool {

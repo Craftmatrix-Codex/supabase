@@ -6,7 +6,7 @@ import (
 )
 
 func (r *PostgresRepository) RevokeSession(ctx context.Context, sessionID string) error {
-	transaction, err := r.db.BeginTx(ctx, nil)
+	transaction, err := r.databaseForContext(ctx).BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin revoke transaction: %w", err)
 	}

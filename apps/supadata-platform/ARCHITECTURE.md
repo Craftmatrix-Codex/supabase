@@ -12,7 +12,10 @@ Single public URL
        PostgreSQL + object storage
 ```
 
-The final deployment uses one multi-stage Dockerfile. Studio static assets and the Go binary are shipped in one runtime image. PostgreSQL remains PostgreSQL and is not reimplemented.
+The Go process is request-scoped rather than globally project-selected for data-plane traffic. REST, Storage, Realtime, and Auth routes resolve a project from the project hostname or `X-Supadata-Project`, and can bind that request to a project-specific database connection. The registry's global current project remains only for the control-plane selector contract; it is never used as the data-plane tenant boundary.
+
+Each registered project receives deterministic non-secret resource bindings: a PostgreSQL database/role namespace, an S3 bucket, and an optional project hostname. The database router rejects unknown projects instead of falling back to a default connection. PostgreSQL RLS transactions also receive `request.jwt.claim.project_id` for policy enforcement.
+
 
 ## Modular monolith
 

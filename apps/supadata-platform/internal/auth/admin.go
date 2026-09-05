@@ -7,7 +7,7 @@ import (
 )
 
 func (r *PostgresRepository) DeleteUser(ctx context.Context, userID string) error {
-	result, err := r.db.ExecContext(ctx, fmt.Sprintf(`
+	result, err := r.databaseForContext(ctx).ExecContext(ctx, fmt.Sprintf(`
 		UPDATE %s.users SET deleted_at = NOW(), updated_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL`, quoteIdentifier(r.schema)), userID)
 	if err != nil {
@@ -29,13 +29,13 @@ func (r *PostgresRepository) ListUsers(ctx context.Context, page, perPage int) (
 	}
 	quotedSchema := quoteIdentifier(r.schema)
 	var total int
-	if err := r.db.QueryRowContext(ctx, fmt.Sprintf(`
+	if err := r.databaseForContext(ctx).QueryRowContext(ctx, fmt.Sprintf(`
 		SELECT count(*) FROM %s.users WHERE deleted_at IS NULL`, quotedSchema)).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count auth users: %w", err)
 	}
 	// Keep the offset calculation bounded by the validated page/per-page contract.
 	offset := (page - 1) * perPage
-	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
+	rows, err := r.databaseForContext(ctx).QueryContext(ctx, fmt.Sprintf(`
 		SELECT id, email, role, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmed_at
 		FROM %s.users
 		WHERE deleted_at IS NULL

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/database"
 )
 
 const defaultAuthSchema = "auth"
@@ -34,6 +35,13 @@ func NewPostgresRepository(db *sql.DB, schema string) (*PostgresRepository, erro
 	return &PostgresRepository{db: db, schema: schema}, nil
 }
 
+func (r *PostgresRepository) databaseForContext(ctx context.Context) *sql.DB {
+	if databaseConnection, ok := database.ConnectionFromContext(ctx); ok {
+		return databaseConnection
+	}
+	return r.db
+}
+
 func (r *PostgresRepository) CreateUser(ctx context.Context, email, passwordHash string, metadata map[string]any, confirmed bool) (User, error) {
 	metadataJSON, err := json.Marshal(nonNilMetadata(metadata))
 	if err != nil {
@@ -52,7 +60,7 @@ func (r *PostgresRepository) CreateUser(ctx context.Context, email, passwordHash
 	if err != nil {
 		return User{}, err
 	}
-	return r.scanUser(r.db.QueryRowContext(ctx, query, id, email, passwordHash, confirmedAt, metadataJSON), "create user")
+	return r.scanUser(r.databaseForContext(ctx).QueryRowContext(ctx, query, id, email, passwordHash, confirmedAt, metadataJSON), "create user")
 }
 
 func (r *PostgresRepository) FindUserByEmail(ctx context.Context, email string) (User, string, error) {
@@ -65,7 +73,7 @@ func (r *PostgresRepository) FindUserByEmail(ctx context.Context, email string) 
 	var passwordHash string
 	var appMetadataJSON, userMetadataJSON []byte
 	var confirmedAt sql.NullTime
-	if err := r.db.QueryRowContext(ctx, query, email).Scan(
+	if err := r.databaseForContext(ctx).QueryRowContext(ctx, query, email).Scan(
 		&user.ID, &user.Email, &user.Role, &passwordHash, &appMetadataJSON, &userMetadataJSON,
 		&user.CreatedAt, &user.UpdatedAt, &confirmedAt,
 	); err != nil {
@@ -92,7 +100,7 @@ func (r *PostgresRepository) FindUserByID(ctx context.Context, id string) (User,
 		FROM %s.users
 		WHERE id = $1 AND deleted_at IS NULL
 		LIMIT 1`, quoteIdentifier(r.schema))
-	return r.scanUser(r.db.QueryRowContext(ctx, query, id), "find user")
+	return r.scanUser(r.databaseForContext(ctx).QueryRowContext(ctx, query, id), "find user")
 }
 
 func (r *PostgresRepository) CreateSession(ctx context.Context, userID, refreshTokenHash string, expiresAt time.Time) (Session, error) {
@@ -100,7 +108,7 @@ func (r *PostgresRepository) CreateSession(ctx context.Context, userID, refreshT
 	if err != nil {
 		return Session{}, err
 	}
-	transaction, err := r.db.BeginTx(ctx, nil)
+	transaction, err := r.databaseForContext(ctx).BeginTx(ctx, nil)
 	if err != nil {
 		return Session{}, fmt.Errorf("begin session transaction: %w", err)
 	}

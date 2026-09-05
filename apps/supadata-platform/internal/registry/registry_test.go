@@ -82,6 +82,27 @@ func TestRegistryResolveProjectDoesNotChangeCurrentSelection(t *testing.T) {
 	}
 }
 
+func TestRegistryPersistsProjectResourceScopes(t *testing.T) {
+	store, err := New(Options{DataDir: t.TempDir(), PublicHost: "supabase.example.com"})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	alpha, err := store.CreateProject(context.Background(), "Alpha", "alpha")
+	if err != nil {
+		t.Fatalf("CreateProject(alpha) error = %v", err)
+	}
+	beta, err := store.CreateProject(context.Background(), "Beta", "beta")
+	if err != nil {
+		t.Fatalf("CreateProject(beta) error = %v", err)
+	}
+	if alpha.Scope.Database.Name == beta.Scope.Database.Name || alpha.Scope.Storage.Bucket == beta.Scope.Storage.Bucket {
+		t.Fatalf("project scopes collide: alpha=%+v beta=%+v", alpha.Scope, beta.Scope)
+	}
+	if alpha.Scope.PublicURL != "https://alpha.supabase.example.com" {
+		t.Fatalf("alpha public URL = %q", alpha.Scope.PublicURL)
+	}
+}
+
 func TestRegistryRejectsDuplicateAndEmptyProjects(t *testing.T) {
 	store, err := New(Options{DataDir: t.TempDir()})
 	if err != nil {

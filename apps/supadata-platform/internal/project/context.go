@@ -5,7 +5,10 @@ import (
 	"errors"
 )
 
-var ErrNotFound = errors.New("project not found")
+var (
+	ErrNotFound      = errors.New("project not found")
+	ErrNoProjectHost = errors.New("host does not identify a project")
+)
 
 type scopeContextKey struct{}
 

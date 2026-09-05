@@ -24,7 +24,7 @@ import (
 
 func main() {
 	cfg := config.Load()
-	store, err := registry.New(registry.Options{DataDir: cfg.DataDir})
+	store, err := registry.New(registry.Options{DataDir: cfg.DataDir, PublicHost: cfg.PublicHost})
 	if err != nil {
 		slog.Error("initialize registry", "error", err)
 		os.Exit(1)

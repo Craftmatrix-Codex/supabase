@@ -2,12 +2,16 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
 
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/database"
 	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/project"
+	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/registry"
 )
 
 type projectScopeResolverStub struct {
@@ -69,6 +73,73 @@ func TestServerResolvesProjectScopePerRequest(t *testing.T) {
 		if delegate.seenIDs[index] != want[index] {
 			t.Fatalf("seen project %d = %q, want %q", index, delegate.seenIDs[index], want[index])
 		}
+	}
+}
+
+func TestServerResolvesProjectScopeFromProjectHostname(t *testing.T) {
+	store, err := registry.New(registry.Options{DataDir: t.TempDir(), PublicHost: "supabase.example.com"})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if _, err := store.CreateProject(context.Background(), "Alpha", "alpha"); err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	delegate := &projectScopeHandler{}
+	server := NewServer(ServerOptions{
+		ProjectResolver:     store,
+		RequireProjectScope: true,
+		REST:                delegate,
+	})
+	request := httptest.NewRequest(http.MethodGet, "https://alpha.supabase.example.com/rest/v1/items", nil)
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("response status = %d, want %d", response.Code, http.StatusNoContent)
+	}
+	if len(delegate.seenIDs) != 1 || delegate.seenIDs[0] != "alpha" {
+		t.Fatalf("seen project IDs = %v, want [alpha]", delegate.seenIDs)
+	}
+}
+
+type projectDatabaseHandler struct {
+	want *sql.DB
+}
+
+func (h projectDatabaseHandler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
+	got, ok := database.ConnectionFromContext(request.Context())
+	if !ok || got != h.want {
+		http.Error(response, "wrong project database", http.StatusInternalServerError)
+		return
+	}
+	response.WriteHeader(http.StatusNoContent)
+}
+
+func TestServerBindsResolvedProjectDatabase(t *testing.T) {
+	alphaDB, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New() error = %v", err)
+	}
+	defer alphaDB.Close()
+	router := database.NewRouter(nil)
+	if err := router.Register("alpha", alphaDB); err != nil {
+		t.Fatalf("Register(alpha) error = %v", err)
+	}
+	server := NewServer(ServerOptions{
+		ProjectResolver:     projectScopeResolverStub{projects: map[string]project.Project{"alpha": {ID: "alpha"}}},
+		DatabaseResolver:    router,
+		RequireProjectScope: true,
+		REST:                projectDatabaseHandler{want: alphaDB},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/rest/v1/items", nil)
+	request.Header.Set("X-Supadata-Project", "alpha")
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("response status = %d, want %d", response.Code, http.StatusNoContent)
 	}
 }
 
