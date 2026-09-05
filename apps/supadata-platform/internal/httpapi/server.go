@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -65,33 +66,37 @@ type APIKeyConfig struct {
 	ServiceRole string
 }
 type ServerOptions struct {
-	Token               string
-	AllowedOrigin       string
-	Registry            Registry
-	ProjectResolver     ProjectResolver
-	DatabaseResolver    database.Resolver
-	RequireProjectScope bool
-	Auth                AuthService
-	APIKeys             APIKeyConfig
-	AuthSettings        AuthSettings
-	REST                http.Handler
-	Storage             http.Handler
-	Realtime            http.Handler
+	Token                string
+	ControlPlaneUsername string
+	ControlPlanePassword string
+	AllowedOrigin        string
+	Registry             Registry
+	ProjectResolver      ProjectResolver
+	DatabaseResolver     database.Resolver
+	RequireProjectScope  bool
+	Auth                 AuthService
+	APIKeys              APIKeyConfig
+	AuthSettings         AuthSettings
+	REST                 http.Handler
+	Storage              http.Handler
+	Realtime             http.Handler
 }
 
 type Server struct {
-	token               string
-	allowedOrigin       string
-	registry            Registry
-	projectResolver     ProjectResolver
-	databaseResolver    database.Resolver
-	requireProjectScope bool
-	auth                AuthService
-	apiKeys             APIKeyConfig
-	authSettings        AuthSettings
-	rest                http.Handler
-	storage             http.Handler
-	realtime            http.Handler
+	token                string
+	controlPlaneUsername string
+	controlPlanePassword string
+	allowedOrigin        string
+	registry             Registry
+	projectResolver      ProjectResolver
+	databaseResolver     database.Resolver
+	requireProjectScope  bool
+	auth                 AuthService
+	apiKeys              APIKeyConfig
+	authSettings         AuthSettings
+	rest                 http.Handler
+	storage              http.Handler
+	realtime             http.Handler
 }
 
 func NewServer(options ServerOptions) *Server {
@@ -99,7 +104,7 @@ func NewServer(options ServerOptions) *Server {
 	if origin == "" {
 		origin = "*"
 	}
-	return &Server{token: options.Token, allowedOrigin: origin, registry: options.Registry, projectResolver: options.ProjectResolver, databaseResolver: options.DatabaseResolver, requireProjectScope: options.RequireProjectScope, auth: options.Auth, apiKeys: options.APIKeys, authSettings: options.AuthSettings, rest: options.REST, storage: options.Storage, realtime: options.Realtime}
+	return &Server{token: options.Token, controlPlaneUsername: options.ControlPlaneUsername, controlPlanePassword: options.ControlPlanePassword, allowedOrigin: origin, registry: options.Registry, projectResolver: options.ProjectResolver, databaseResolver: options.DatabaseResolver, requireProjectScope: options.RequireProjectScope, auth: options.Auth, apiKeys: options.APIKeys, authSettings: options.AuthSettings, rest: options.REST, storage: options.Storage, realtime: options.Realtime}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -282,9 +287,10 @@ func (s *Server) serveHTTP(response http.ResponseWriter, request *http.Request) 
 	}
 
 	protected := strings.HasPrefix(request.URL.Path, "/api/projects") ||
+		isStudioLintPath(request.URL.Path) ||
 		strings.HasPrefix(request.URL.Path, "/proxy") ||
 		strings.HasPrefix(request.URL.Path, "/proxy-meta")
-	if protected && !auth.HasValidBearerToken(s.token, request.Header.Get("Authorization")) {
+	if protected && !s.hasControlPlaneAuth(request.Header.Get("Authorization")) {
 		writeJSON(response, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
@@ -302,6 +308,8 @@ func (s *Server) serveHTTP(response http.ResponseWriter, request *http.Request) 
 			return
 		}
 		writeJSON(response, http.StatusOK, map[string]any{"projects": projects})
+	case request.Method == http.MethodGet && isStudioLintPath(request.URL.Path):
+		writeJSON(response, http.StatusOK, []any{})
 	case request.Method == http.MethodGet && request.URL.Path == "/api/projects/current":
 		project, err := s.registry.CurrentProject(ctx)
 		if err != nil {
@@ -427,6 +435,26 @@ func pagination(request *http.Request) (int, int, bool) {
 		}
 	}
 	return page, perPage, true
+}
+
+func isStudioLintPath(path string) bool {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	return len(parts) == 5 && parts[0] == "api" && parts[1] == "platform" && parts[2] == "projects" && parts[4] == "run-lints" && parts[3] != ""
+}
+
+func (s *Server) hasControlPlaneAuth(header string) bool {
+	if auth.HasValidBearerToken(s.token, header) {
+		return true
+	}
+	if s.controlPlaneUsername == "" || s.controlPlanePassword == "" || !strings.HasPrefix(header, "Basic ") {
+		return false
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(strings.TrimPrefix(header, "Basic ")))
+	if err != nil {
+		return false
+	}
+	expected := s.controlPlaneUsername + ":" + s.controlPlanePassword
+	return len(decoded) == len(expected) && subtle.ConstantTimeCompare(decoded, []byte(expected)) == 1
 }
 
 func (s *Server) hasAPIKey(provided string) bool {

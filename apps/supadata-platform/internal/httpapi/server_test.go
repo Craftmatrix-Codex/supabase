@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -48,6 +49,28 @@ func TestHealthIsPublicAndProjectManagementRequiresBearer(t *testing.T) {
 	server.Handler().ServeHTTP(protected, httptest.NewRequest(http.MethodGet, "/api/projects", nil))
 	if protected.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated status = %d, want 401", protected.Code)
+	}
+}
+
+func TestBasicStudioAuthCanListProjects(t *testing.T) {
+	server := NewServer(ServerOptions{Token: "secret", ControlPlaneUsername: "studio", ControlPlanePassword: "password", Registry: &fakeRegistry{projects: []Project{{ID: "default"}}}})
+	request := httptest.NewRequest(http.MethodGet, "/api/projects", nil)
+	request.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("studio:password")))
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.Code)
+	}
+}
+
+func TestStudioLintEndpointReturnsSuccess(t *testing.T) {
+	server := NewServer(ServerOptions{Token: "secret", ControlPlaneUsername: "studio", ControlPlanePassword: "password", Registry: &fakeRegistry{}})
+	request := httptest.NewRequest(http.MethodGet, "/api/platform/projects/default/run-lints", nil)
+	request.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("studio:password")))
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.Code)
 	}
 }
 

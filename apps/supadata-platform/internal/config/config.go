@@ -10,6 +10,8 @@ type Config struct {
 	DataDir             string
 	PublicHost          string
 	ControlPlaneToken   string
+	StudioAuthUsername  string
+	StudioAuthPassword  string
 	RequireProjectScope bool
 	AllowedOrigin       string
 	DatabaseMode        string
@@ -37,6 +39,8 @@ func Load() Config {
 		DataDir:             envString("SUPADATA_DATA_DIR", "/var/lib/supadata"),
 		PublicHost:          envString("SUPADATA_PUBLIC_HOST", "supabase.craftmatrix.org"),
 		ControlPlaneToken:   os.Getenv("SUPADATA_CONTROL_PLANE_TOKEN"),
+		StudioAuthUsername:  os.Getenv("SUPADATA_STUDIO_AUTH_USERNAME"),
+		StudioAuthPassword:  os.Getenv("SUPADATA_STUDIO_AUTH_PASSWORD"),
 		RequireProjectScope: envBool("SUPADATA_REQUIRE_PROJECT_SCOPE", false),
 		AllowedOrigin:       envString("SUPADATA_ALLOWED_ORIGIN", "*"),
 		DatabaseMode:        envString("SUPADATA_DATABASE_MODE", "shared"),
