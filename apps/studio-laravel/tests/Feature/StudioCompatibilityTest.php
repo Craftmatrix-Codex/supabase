@@ -27,6 +27,13 @@ class StudioCompatibilityTest extends TestCase
             ->assertJsonPath('ref', 'default');
     }
 
+    public function test_lints_accept_the_native_get_request(): void
+    {
+        $this->auth()->getJson('/api/platform/projects/default/run-lints')
+            ->assertOk()
+            ->assertExactJson([]);
+    }
+
     public function test_content_and_content_count_return_empty_state_contracts(): void
     {
         $this->auth()->getJson('/api/platform/projects/default/content')

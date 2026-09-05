@@ -24,7 +24,7 @@ Route::middleware('studio.auth')->group(function (): void {
     Route::get('/api/platform/projects/{project}/settings', [StudioController::class, 'settings']);
     Route::get('/api/platform/projects/{project}/databases', [StudioController::class, 'databases']);
     Route::get('/api/v1/projects/{project}/api-keys', [StudioController::class, 'apiKeys']);
-    Route::post('/api/platform/projects/{project}/run-lints', [StudioController::class, 'runLints']);
+    Route::match(['get', 'post'], '/api/platform/projects/{project}/run-lints', [StudioController::class, 'runLints']);
     Route::post('/api/platform/pg-meta/{project}/query', [StudioController::class, 'pgMetaQuery']);
     Route::get('/api/platform/projects/{project}/content/count', [StudioController::class, 'contentCount']);
     Route::get('/api/platform/projects/{project}/content', [StudioController::class, 'content']);
