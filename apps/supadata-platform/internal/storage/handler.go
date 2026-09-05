@@ -13,10 +13,12 @@ import (
 	"time"
 
 	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/jwt"
+	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/project"
 )
 
 var ErrObjectNotFound = errors.New("object not found")
 var ErrObjectTooLarge = errors.New("object too large")
+var ErrProjectBucketForbidden = errors.New("project bucket access forbidden")
 
 type ObjectInfo struct {
 	Bucket       string    `json:"-"`
@@ -98,12 +100,21 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	if strings.HasPrefix(path, "list/") && request.Method == http.MethodPost {
-		h.handleList(response, request, strings.TrimPrefix(path, "list/"))
+		bucket := strings.TrimPrefix(path, "list/")
+		if err := validateProjectBucket(request.Context(), bucket); err != nil {
+			writeJSON(response, http.StatusNotFound, map[string]string{"error": "object not found"})
+			return
+		}
+		h.handleList(response, request, bucket)
 		return
 	}
 	public, bucket, key, err := parseObjectPath(path)
 	if err != nil {
 		writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := validateProjectBucket(request.Context(), bucket); err != nil {
+		writeJSON(response, http.StatusNotFound, map[string]string{"error": "object not found"})
 		return
 	}
 	if !public && request.Method != http.MethodGet && !h.hasAuthenticatedMutation(request, role) {
@@ -119,6 +130,18 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 	case http.MethodDelete:
 		h.handleDelete(response, request, bucket, key)
 	}
+}
+
+func validateProjectBucket(ctx context.Context, bucket string) error {
+	scope, ok := project.ScopeFromContext(ctx)
+	if !ok {
+		return nil
+	}
+	baseBucket := scope.Scope.Storage.Bucket
+	if baseBucket == "" || bucket != baseBucket && !strings.HasPrefix(bucket, baseBucket+"-") {
+		return ErrProjectBucketForbidden
+	}
+	return nil
 }
 
 func (h *Handler) handlePut(response http.ResponseWriter, request *http.Request, bucket, key string) {
