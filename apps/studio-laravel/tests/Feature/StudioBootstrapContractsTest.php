@@ -34,7 +34,9 @@ class StudioBootstrapContractsTest extends TestCase
         $this->auth()->getJson('/api/platform/projects/default/config/secrets/update-status')
             ->assertOk()->assertJson(['update_status' => null]);
         $this->auth()->getJson('/api/platform/projects/default/config/postgrest')
-            ->assertOk()->assertJsonStructure(['db_anon_role', 'db_extra_search_path', 'db_schema', 'jwt_secret', 'max_rows', 'role_claim_key']);
+            ->assertOk()
+            ->assertJsonStructure(['db_anon_role', 'db_extra_search_path', 'db_schema', 'jwt_secret', 'max_rows', 'role_claim_key'])
+            ->assertJsonPath('db_schema', 'public');
         $this->auth()->get('/api/platform/projects/default/analytics/endpoints/logs.all')
             ->assertOk()->assertJson(['result' => []]);
     }

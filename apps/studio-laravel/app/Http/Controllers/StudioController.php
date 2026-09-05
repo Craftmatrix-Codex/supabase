@@ -44,7 +44,7 @@ class StudioController
         return response()->json([
             'db_anon_role' => 'anon',
             'db_extra_search_path' => env('PGRST_DB_EXTRA_SEARCH_PATH', 'public'),
-            'db_schema' => ['public'],
+            'db_schema' => 'public',
             'jwt_secret' => '',
             'max_rows' => (int) env('PGRST_DB_MAX_ROWS', 1000),
             'role_claim_key' => '.role',
