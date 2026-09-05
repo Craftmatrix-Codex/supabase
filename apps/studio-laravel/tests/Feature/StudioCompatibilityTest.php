@@ -20,6 +20,14 @@ class StudioCompatibilityTest extends TestCase
         $response->assertOk()->assertJsonIsArray();
     }
 
+    public function test_pg_meta_entity_type_query_returns_native_data_row(): void
+    {
+        $this->auth()->postJson('/api/platform/pg-meta/default/query?key=entity-types-public-0', ['query' => 'select 1'])
+            ->assertOk()
+            ->assertJsonPath('0.data.entities', [])
+            ->assertJsonPath('0.data.count', 0);
+    }
+
     public function test_project_detail_uses_native_ref_identifier(): void
     {
         $this->auth()->getJson('/api/platform/projects/default')

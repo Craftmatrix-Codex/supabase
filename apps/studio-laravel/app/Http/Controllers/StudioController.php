@@ -184,8 +184,15 @@ class StudioController
         $query = $request->input('query');
         abort_unless(is_string($query) && trim($query) !== '', 422, 'query is required');
 
-        // The database-backed metadata adapter is intentionally isolated behind
-        // this contract. Empty metadata is a valid self-hosted initial state.
+        $key = $request->query('key');
+        if (is_string($key) && str_starts_with($key, 'entity-types-')) {
+            return response()->json([
+                ['data' => ['entities' => [], 'count' => 0]],
+            ]);
+        }
+
+        // Other metadata queries currently use an empty result set as the
+        // self-hosted no-schema state.
         return response()->json([]);
     }
 
