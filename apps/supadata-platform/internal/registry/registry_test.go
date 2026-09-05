@@ -54,6 +54,34 @@ func TestRegistryPersistsProjectsAndCurrentSelection(t *testing.T) {
 	}
 }
 
+func TestRegistryResolveProjectDoesNotChangeCurrentSelection(t *testing.T) {
+	store, err := New(Options{DataDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if _, err := store.CreateProject(context.Background(), "First", "first"); err != nil {
+		t.Fatalf("CreateProject(first) error = %v", err)
+	}
+	if _, err := store.CreateProject(context.Background(), "Second", "second"); err != nil {
+		t.Fatalf("CreateProject(second) error = %v", err)
+	}
+
+	resolved, err := store.ResolveProject(context.Background(), "second")
+	if err != nil {
+		t.Fatalf("ResolveProject() error = %v", err)
+	}
+	if resolved.ID != "second" {
+		t.Fatalf("resolved project = %+v, want second", resolved)
+	}
+	current, err := store.CurrentProject(context.Background())
+	if err != nil {
+		t.Fatalf("CurrentProject() error = %v", err)
+	}
+	if current == nil || current.ID != "first" {
+		t.Fatalf("current project = %+v, want first", current)
+	}
+}
+
 func TestRegistryRejectsDuplicateAndEmptyProjects(t *testing.T) {
 	store, err := New(Options{DataDir: t.TempDir()})
 	if err != nil {

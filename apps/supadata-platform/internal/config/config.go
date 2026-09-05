@@ -9,8 +9,9 @@ type Config struct {
 	Port              int
 	DataDir           string
 	PublicHost        string
-	ControlPlaneToken string
-	AllowedOrigin     string
+	ControlPlaneToken    string
+	RequireProjectScope  bool
+	AllowedOrigin        string
 	DatabaseMode      string
 	StorageMode       string
 	StorageEndpoint   string
@@ -35,8 +36,9 @@ func Load() Config {
 		Port:              envInt("SUPADATA_PORT", envInt("PORT", 8090)),
 		DataDir:           envString("SUPADATA_DATA_DIR", "/var/lib/supadata"),
 		PublicHost:        envString("SUPADATA_PUBLIC_HOST", "13.140.160.208"),
-		ControlPlaneToken: os.Getenv("SUPADATA_CONTROL_PLANE_TOKEN"),
-		AllowedOrigin:     envString("SUPADATA_ALLOWED_ORIGIN", "*"),
+		ControlPlaneToken:    os.Getenv("SUPADATA_CONTROL_PLANE_TOKEN"),
+		RequireProjectScope:  envBool("SUPADATA_REQUIRE_PROJECT_SCOPE", false),
+		AllowedOrigin:        envString("SUPADATA_ALLOWED_ORIGIN", "*"),
 		DatabaseMode:      envString("SUPADATA_DATABASE_MODE", "shared"),
 		StorageMode:       envString("SUPADATA_STORAGE_MODE", "shared"),
 		StorageEndpoint:   os.Getenv("SUPADATA_STORAGE_ENDPOINT"),

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,6 +20,10 @@ type Registry interface {
 	CurrentProject(context.Context) (*Project, error)
 	CreateProject(context.Context, string, string) (Project, error)
 	SelectProject(context.Context, string) (Project, error)
+}
+
+type ProjectResolver interface {
+	ResolveProject(context.Context, string) (Project, error)
 }
 
 type AuthService interface {
@@ -59,27 +64,31 @@ type APIKeyConfig struct {
 	ServiceRole string
 }
 type ServerOptions struct {
-	Token         string
-	AllowedOrigin string
-	Registry      Registry
-	Auth          AuthService
-	APIKeys       APIKeyConfig
-	AuthSettings  AuthSettings
-	REST          http.Handler
-	Storage       http.Handler
-	Realtime      http.Handler
+	Token               string
+	AllowedOrigin       string
+	Registry            Registry
+	ProjectResolver     ProjectResolver
+	RequireProjectScope bool
+	Auth                AuthService
+	APIKeys             APIKeyConfig
+	AuthSettings        AuthSettings
+	REST                http.Handler
+	Storage             http.Handler
+	Realtime            http.Handler
 }
 
 type Server struct {
-	token         string
-	allowedOrigin string
-	registry      Registry
-	auth          AuthService
-	apiKeys       APIKeyConfig
-	authSettings  AuthSettings
-	rest          http.Handler
-	storage       http.Handler
-	realtime      http.Handler
+	token               string
+	allowedOrigin       string
+	registry            Registry
+	projectResolver     ProjectResolver
+	requireProjectScope bool
+	auth                AuthService
+	apiKeys             APIKeyConfig
+	authSettings        AuthSettings
+	rest                http.Handler
+	storage             http.Handler
+	realtime            http.Handler
 }
 
 func NewServer(options ServerOptions) *Server {
@@ -87,7 +96,7 @@ func NewServer(options ServerOptions) *Server {
 	if origin == "" {
 		origin = "*"
 	}
-	return &Server{token: options.Token, allowedOrigin: origin, registry: options.Registry, auth: options.Auth, apiKeys: options.APIKeys, authSettings: options.AuthSettings, rest: options.REST, storage: options.Storage, realtime: options.Realtime}
+	return &Server{token: options.Token, allowedOrigin: origin, registry: options.Registry, projectResolver: options.ProjectResolver, requireProjectScope: options.RequireProjectScope, auth: options.Auth, apiKeys: options.APIKeys, authSettings: options.AuthSettings, rest: options.REST, storage: options.Storage, realtime: options.Realtime}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -108,7 +117,9 @@ func (s *Server) serveHTTP(response http.ResponseWriter, request *http.Request) 
 			writeJSON(response, http.StatusServiceUnavailable, map[string]string{"error": "REST service unavailable"})
 			return
 		}
-		s.rest.ServeHTTP(response, request)
+		if scopedRequest, ok := s.withProjectScope(response, request); ok {
+			s.rest.ServeHTTP(response, scopedRequest)
+		}
 		return
 	}
 	if strings.HasPrefix(request.URL.Path, "/storage/v1/") {
@@ -116,7 +127,9 @@ func (s *Server) serveHTTP(response http.ResponseWriter, request *http.Request) 
 			writeJSON(response, http.StatusServiceUnavailable, map[string]string{"error": "storage service unavailable"})
 			return
 		}
-		s.storage.ServeHTTP(response, request)
+		if scopedRequest, ok := s.withProjectScope(response, request); ok {
+			s.storage.ServeHTTP(response, scopedRequest)
+		}
 		return
 	}
 	if strings.HasPrefix(request.URL.Path, "/realtime/v1/") {
@@ -124,7 +137,9 @@ func (s *Server) serveHTTP(response http.ResponseWriter, request *http.Request) 
 			writeJSON(response, http.StatusServiceUnavailable, map[string]string{"error": "realtime service unavailable"})
 			return
 		}
-		s.realtime.ServeHTTP(response, request)
+		if scopedRequest, ok := s.withProjectScope(response, request); ok {
+			s.realtime.ServeHTTP(response, scopedRequest)
+		}
 		return
 	}
 	if request.Method == http.MethodGet && request.URL.Path == "/health" {
@@ -321,6 +336,31 @@ func (s *Server) serveHTTP(response http.ResponseWriter, request *http.Request) 
 	default:
 		writeJSON(response, http.StatusNotFound, map[string]string{"error": "not found"})
 	}
+}
+
+func (s *Server) withProjectScope(response http.ResponseWriter, request *http.Request) (*http.Request, bool) {
+	projectID := strings.TrimSpace(request.Header.Get("X-Supadata-Project"))
+	if projectID == "" {
+		if s.requireProjectScope {
+			writeJSON(response, http.StatusBadRequest, map[string]string{"error": "project scope is required"})
+			return nil, false
+		}
+		return request, true
+	}
+	if s.projectResolver == nil {
+		writeJSON(response, http.StatusServiceUnavailable, map[string]string{"error": "project resolver unavailable"})
+		return nil, false
+	}
+	resolved, err := s.projectResolver.ResolveProject(request.Context(), projectID)
+	if err != nil {
+		if errors.Is(err, project.ErrNotFound) {
+			writeJSON(response, http.StatusNotFound, map[string]string{"error": "project not found"})
+			return nil, false
+		}
+		writeJSON(response, http.StatusBadGateway, map[string]string{"error": "project resolver failed"})
+		return nil, false
+	}
+	return request.WithContext(project.WithScope(request.Context(), resolved)), true
 }
 
 func (s *Server) isServiceRoleRequest(request *http.Request) bool {
