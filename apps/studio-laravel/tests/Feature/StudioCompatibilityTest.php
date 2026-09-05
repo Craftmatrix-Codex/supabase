@@ -20,6 +20,13 @@ class StudioCompatibilityTest extends TestCase
         $response->assertOk()->assertJsonIsArray();
     }
 
+    public function test_project_detail_uses_native_ref_identifier(): void
+    {
+        $this->auth()->getJson('/api/platform/projects/default')
+            ->assertOk()
+            ->assertJsonPath('ref', 'default');
+    }
+
     public function test_content_and_content_count_return_empty_state_contracts(): void
     {
         $this->auth()->getJson('/api/platform/projects/default/content')

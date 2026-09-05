@@ -9,9 +9,14 @@ return [
     'db_port' => (int) env('DB_PORT', 5432),
     'projects' => [
         [
-            'id' => 'default',
+            'id' => 1,
+            'ref' => 'default',
             'name' => 'Default Project',
-            'status' => 'ready',
+            'organization_id' => 1,
+            'cloud_provider' => 'localhost',
+            'status' => 'ACTIVE_HEALTHY',
+            'region' => 'local',
+            'inserted_at' => '2021-08-02T06:40:40.646Z',
             'current' => true,
         ],
     ],

@@ -67,7 +67,7 @@ class StudioController
     public function project(string $project): JsonResponse
     {
         $this->assertProject($project);
-        $record = collect(config('studio.projects', []))->firstWhere('id', $project);
+        $record = collect(config('studio.projects', []))->firstWhere('ref', $project);
 
         return response()->json(array_merge($record, [
             'connectionString' => '',
@@ -167,7 +167,7 @@ class StudioController
 
     public function runLints(string $project): JsonResponse
     {
-        abort_unless(collect(config('studio.projects', []))->contains('id', $project), 404);
+        abort_unless(collect(config('studio.projects', []))->contains('ref', $project), 404);
 
         return response()->json([]);
     }
@@ -248,7 +248,7 @@ class StudioController
 
     private function projectRecord(string $project): array
     {
-        $record = collect(config('studio.projects', []))->firstWhere('id', $project);
+        $record = collect(config('studio.projects', []))->firstWhere('ref', $project);
         abort_unless(is_array($record), 404);
 
         return $record;
@@ -256,6 +256,6 @@ class StudioController
 
     private function assertProject(string $project): void
     {
-        abort_unless(collect(config('studio.projects', []))->contains('id', $project), 404);
+        abort_unless(collect(config('studio.projects', []))->contains('ref', $project), 404);
     }
 }

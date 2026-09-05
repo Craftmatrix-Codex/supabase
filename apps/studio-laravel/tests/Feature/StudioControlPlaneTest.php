@@ -20,7 +20,8 @@ class StudioControlPlaneTest extends TestCase
         $this->withBasicAuth('studio', 'password')
             ->getJson('/api/platform/projects')
             ->assertOk()
-            ->assertJsonPath('projects.0.id', 'default')
+            ->assertJsonPath('projects.0.id', 1)
+            ->assertJsonPath('projects.0.ref', 'default')
             ->assertJsonPath('projects.0.name', 'Default Project');
     }
 
@@ -29,7 +30,8 @@ class StudioControlPlaneTest extends TestCase
         $this->withBasicAuth('studio', 'password')
             ->getJson('/api/platform/projects/current')
             ->assertOk()
-            ->assertJsonPath('project.id', 'default');
+            ->assertJsonPath('project.id', 1)
+            ->assertJsonPath('project.ref', 'default');
     }
 
     public function test_react_fallback_is_not_a_blade_view(): void
