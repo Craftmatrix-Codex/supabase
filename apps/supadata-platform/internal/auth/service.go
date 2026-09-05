@@ -13,6 +13,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/jwt"
+	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/project"
 )
 
 var (
@@ -173,7 +174,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (SessionResp
 	if err != nil {
 		return SessionResponse{}, ErrInvalidRefreshToken
 	}
-	accessToken, err := s.issueAccessToken(user, session.ID, now, expiresAt)
+	accessToken, err := s.issueAccessToken(ctx, user, session.ID, now, expiresAt)
 	if err != nil {
 		return SessionResponse{}, err
 	}
@@ -217,6 +218,9 @@ func (s *Service) Logout(ctx context.Context, accessToken string) error {
 	if err != nil || claims.Subject == "" || claims.SessionID == "" {
 		return ErrInvalidCredentials
 	}
+	if err := validateProjectClaims(ctx, claims); err != nil {
+		return ErrInvalidCredentials
+	}
 	revoker, ok := s.repository.(SessionRevoker)
 	if !ok {
 		return errors.New("session revocation is not configured")
@@ -235,6 +239,9 @@ func (s *Service) GetUserByAccessToken(ctx context.Context, accessToken string) 
 	if err != nil || claims.Subject == "" {
 		return User{}, ErrInvalidCredentials
 	}
+	if err := validateProjectClaims(ctx, claims); err != nil {
+		return User{}, ErrInvalidCredentials
+	}
 	repository, ok := s.repository.(interface {
 		FindUserByID(context.Context, string) (User, error)
 	})
@@ -246,6 +253,13 @@ func (s *Service) GetUserByAccessToken(ctx context.Context, accessToken string) 
 		return User{}, err
 	}
 	return user, nil
+}
+
+func validateProjectClaims(ctx context.Context, claims jwt.Claims) error {
+	if scope, ok := project.ScopeFromContext(ctx); ok && claims.ProjectID != "" && claims.ProjectID != scope.ID {
+		return errors.New("project token mismatch")
+	}
+	return nil
 }
 
 func (s *Service) issueSession(ctx context.Context, user User) (SessionResponse, error) {
@@ -262,7 +276,7 @@ func (s *Service) issueSession(ctx context.Context, user User) (SessionResponse,
 	if err != nil {
 		return SessionResponse{}, fmt.Errorf("create session: %w", err)
 	}
-	accessToken, err := s.issueAccessToken(user, session.ID, now, expiresAt)
+	accessToken, err := s.issueAccessToken(ctx, user, session.ID, now, expiresAt)
 	if err != nil {
 		return SessionResponse{}, err
 	}
@@ -276,8 +290,8 @@ func (s *Service) issueSession(ctx context.Context, user User) (SessionResponse,
 	}, nil
 }
 
-func (s *Service) issueAccessToken(user User, sessionID string, now, expiresAt time.Time) (string, error) {
-	accessToken, err := jwt.SignHS256(jwt.Claims{
+func (s *Service) issueAccessToken(ctx context.Context, user User, sessionID string, now, expiresAt time.Time) (string, error) {
+	claims := jwt.Claims{
 		Subject:      user.ID,
 		Email:        user.Email,
 		Role:         user.Role,
@@ -288,7 +302,11 @@ func (s *Service) issueAccessToken(user User, sessionID string, now, expiresAt t
 		ExpiresAt:    expiresAt.Unix(),
 		AppMetadata:  user.AppMetadata,
 		UserMetadata: user.UserMetadata,
-	}, s.jwtSecret)
+	}
+	if scope, ok := project.ScopeFromContext(ctx); ok {
+		claims.ProjectID = scope.ID
+	}
+	accessToken, err := jwt.SignHS256(claims, s.jwtSecret)
 	if err != nil {
 		return "", fmt.Errorf("issue access token: %w", err)
 	}

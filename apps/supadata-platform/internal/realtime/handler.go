@@ -11,6 +11,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/jwt"
+	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/project"
 )
 
 type APIKeyConfig struct {
@@ -130,8 +131,14 @@ func (h *Handler) validateAccessToken(request *http.Request) error {
 	if token == "" {
 		return nil
 	}
-	_, err := jwt.VerifyHS256(token, h.jwtSecret, jwt.ValidationOptions{Now: time.Now(), Issuer: h.issuer, Audience: h.audience})
-	return err
+	claims, err := jwt.VerifyHS256(token, h.jwtSecret, jwt.ValidationOptions{Now: time.Now(), Issuer: h.issuer, Audience: h.audience})
+	if err != nil {
+		return err
+	}
+	if scope, ok := project.ScopeFromContext(request.Context()); ok && claims.ProjectID != "" && claims.ProjectID != scope.ID {
+		return errors.New("project token mismatch")
+	}
+	return nil
 }
 
 func (h *Handler) apiKeyRole(queryKey, headerKey string) string {

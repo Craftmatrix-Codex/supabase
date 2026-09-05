@@ -48,7 +48,7 @@ RUN pnpm --filter studio deploy --prod --legacy --ignore-scripts /srv/apps/studi
 
 FROM node:22-slim AS production
 RUN apt-get update -qq && \
-    apt-get install -y --no-install-recommends nginx ca-certificates && \
+    apt-get install -y --no-install-recommends nginx ca-certificates curl && \
     rm -rf /var/lib/apt/lists/* && \
     mkdir -p /var/lib/supadata /app/apps/studio
 COPY --from=go-build /out/supadata-platform /usr/local/bin/supadata-platform

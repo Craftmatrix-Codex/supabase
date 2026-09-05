@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/project"
 )
 
 type fakeRepository struct {
@@ -136,6 +138,21 @@ func TestGetUserByAccessTokenValidatesJWTAndReadsRepository(t *testing.T) {
 	}
 	if user.ID != "user-1" || user.Email != "user@example.com" {
 		t.Fatalf("user = %+v, want repository user", user)
+	}
+}
+
+func TestProjectAccessTokenCannotBeUsedForAnotherProject(t *testing.T) {
+	repository := &fakeRepository{}
+	service := NewService(repository, ServiceOptions{JWTSecret: []byte("auth-test-secret"), TokenTTL: time.Hour, AutoConfirm: true})
+	alphaContext := project.WithScope(context.Background(), project.Project{ID: "alpha"})
+	issued, err := service.SignUp(alphaContext, "user@example.com", "password-123456", nil)
+	if err != nil {
+		t.Fatalf("SignUp() error = %v", err)
+	}
+
+	user, err := service.GetUserByAccessToken(project.WithScope(context.Background(), project.Project{ID: "beta"}), issued.AccessToken)
+	if err == nil || user.ID != "" {
+		t.Fatalf("alpha token was accepted for beta: user=%+v error=%v", user, err)
 	}
 }
 

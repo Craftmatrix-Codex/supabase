@@ -14,6 +14,7 @@ import (
 
 type Claims struct {
 	Subject      string         `json:"sub,omitempty"`
+	ProjectID    string         `json:"project_id,omitempty"`
 	Email        string         `json:"email,omitempty"`
 	Phone        string         `json:"phone,omitempty"`
 	Role         string         `json:"role,omitempty"`
@@ -39,6 +40,7 @@ type tokenHeader struct {
 
 type tokenClaims struct {
 	Subject      string         `json:"sub"`
+	ProjectID    string         `json:"project_id"`
 	Email        string         `json:"email"`
 	Phone        string         `json:"phone"`
 	Role         string         `json:"role"`
@@ -119,6 +121,7 @@ func VerifyHS256(token string, secret []byte, options ValidationOptions) (Claims
 	}
 	return Claims{
 		Subject:      raw.Subject,
+		ProjectID:    raw.ProjectID,
 		Email:        raw.Email,
 		Phone:        raw.Phone,
 		Role:         raw.Role,
