@@ -1,6 +1,7 @@
 package realtime
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -72,18 +73,19 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 	}
 	defer connection.Close()
 	connection.SetReadLimit(1 << 20)
+	joinedTopics := make(map[string]struct{})
 	for {
 		var message []json.RawMessage
 		if err := connection.ReadJSON(&message); err != nil {
 			return
 		}
-		if err := h.handleMessage(connection, message); err != nil {
+		if err := h.handleMessage(request.Context(), connection, message, joinedTopics); err != nil {
 			return
 		}
 	}
 }
 
-func (h *Handler) handleMessage(connection *websocket.Conn, message []json.RawMessage) error {
+func (h *Handler) handleMessage(ctx context.Context, connection *websocket.Conn, message []json.RawMessage, joinedTopics map[string]struct{}) error {
 	if len(message) != 5 {
 		return errors.New("invalid realtime message")
 	}
@@ -101,8 +103,10 @@ func (h *Handler) handleMessage(connection *websocket.Conn, message []json.RawMe
 		if !strings.HasPrefix(topic, "realtime:public:") || strings.TrimPrefix(topic, "realtime:public:") == "" {
 			return writeReply(connection, joinReference, reference, topic, "error", map[string]string{"reason": "unauthorized topic"})
 		}
+		joinedTopics[ProjectTopicKey(ctx, topic)] = struct{}{}
 		return writeReply(connection, joinReference, reference, topic, "ok", map[string]any{})
 	case event == "phx_leave":
+		delete(joinedTopics, ProjectTopicKey(ctx, topic))
 		if err := writeReply(connection, joinReference, reference, topic, "ok", map[string]any{}); err != nil {
 			return err
 		}
