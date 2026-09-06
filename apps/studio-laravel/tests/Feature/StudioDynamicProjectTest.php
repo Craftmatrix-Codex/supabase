@@ -43,7 +43,10 @@ class StudioDynamicProjectTest extends TestCase
                 ->getJson('/api/platform/projects/video-project/settings')
                 ->assertOk()
                 ->assertJsonPath('ref', 'video-project')
-                ->assertJsonPath('name', 'Video Project');
+                ->assertJsonPath('name', 'Video Project')
+                ->assertJsonPath('app_config.protocol', 'https')
+                ->assertJsonPath('app_config.endpoint', 'video-project.supabase.example.com')
+                ->assertJsonPath('app_config.storage_endpoint', 'video-project.supabase.example.com');
         } finally {
             @unlink($path);
         }

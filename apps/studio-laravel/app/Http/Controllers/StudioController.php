@@ -235,14 +235,14 @@ class StudioController
     {
         $record = $this->projectRecord($project);
         $database = $record['scope']['database'] ?? [];
-        $endpoint = $this->projectEndpoint($record);
+        $endpoint = $this->projectEndpointParts($record);
 
         return response()->json([
             'app_config' => [
                 'db_schema' => 'public',
-                'endpoint' => $endpoint,
-                'storage_endpoint' => $endpoint,
-                'protocol' => 'http',
+                'endpoint' => $endpoint['host'],
+                'storage_endpoint' => $endpoint['host'],
+                'protocol' => $endpoint['protocol'],
             ],
             'cloud_provider' => 'local',
             'db_dns_name' => '-',
@@ -352,5 +352,28 @@ class StudioController
         return is_string($publicUrl) && $publicUrl !== ''
             ? $publicUrl
             : (string) config('studio.project_endpoint', 'http://localhost');
+    }
+
+    private function projectEndpointParts(array $record): array
+    {
+        $endpoint = $this->projectEndpoint($record);
+        $parsed = parse_url($endpoint);
+
+        if (is_array($parsed) && is_string($parsed['host'] ?? null)) {
+            $host = $parsed['host'];
+            if (isset($parsed['port'])) {
+                $host .= ':' . $parsed['port'];
+            }
+
+            return [
+                'host' => $host,
+                'protocol' => is_string($parsed['scheme'] ?? null) ? $parsed['scheme'] : 'http',
+            ];
+        }
+
+        return [
+            'host' => preg_replace('#^https?://#', '', rtrim($endpoint, '/')),
+            'protocol' => 'http',
+        ];
     }
 }
