@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use App\Services\PlatformTelemetry;
 use App\Services\StudioContentStore;
 use InvalidArgumentException;
 use RuntimeException;
@@ -14,6 +15,51 @@ class StudioController
     public function health(): JsonResponse
     {
         return response()->json(['status' => 'ok']);
+    }
+
+    public function recordTelemetry(Request $request, PlatformTelemetry $telemetry): JsonResponse
+    {
+        $validated = $request->validate([
+            'severity' => ['sometimes', 'string', 'max:16', 'in:debug,info,warning,error,fatal'],
+            'source' => ['sometimes', 'string', 'max:32'],
+            'event_type' => ['sometimes', 'string', 'max:64'],
+            'project_id' => ['sometimes', 'nullable', 'string', 'max:128'],
+            'request_id' => ['sometimes', 'nullable', 'string', 'max:128'],
+            'route' => ['sometimes', 'nullable', 'string', 'max:512'],
+            'method' => ['sometimes', 'nullable', 'string', 'max:16'],
+            'status_code' => ['sometimes', 'nullable', 'integer', 'between:100,599'],
+            'error_class' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'message' => ['required', 'string', 'max:8192'],
+            'stack_trace' => ['sometimes', 'nullable', 'string', 'max:32768'],
+            'context' => ['sometimes', 'array'],
+            'release' => ['sometimes', 'nullable', 'string', 'max:128'],
+        ]);
+
+        $validated['source'] ??= 'browser';
+        $validated['event_type'] ??= 'error';
+        $validated['route'] ??= $request->path();
+        $validated['method'] ??= $request->method();
+        $validated['user_agent'] = $request->userAgent();
+        $validated['request_id'] ??= $request->header('X-Request-ID');
+
+        $id = $telemetry->record($validated);
+
+        return response()->json(['accepted' => $id !== null, 'id' => $id], Response::HTTP_ACCEPTED);
+    }
+
+    public function telemetryEvents(Request $request, PlatformTelemetry $telemetry): JsonResponse
+    {
+        $validated = $request->validate([
+            'severity' => ['sometimes', 'string', 'max:16'],
+            'source' => ['sometimes', 'string', 'max:32'],
+            'event_type' => ['sometimes', 'string', 'max:64'],
+            'project_id' => ['sometimes', 'string', 'max:128'],
+            'limit' => ['sometimes', 'integer', 'between:1,100'],
+        ]);
+
+        return response()->json([
+            'data' => $telemetry->recent($validated, (int) ($validated['limit'] ?? 100)),
+        ]);
     }
 
     public function utcTime(): JsonResponse

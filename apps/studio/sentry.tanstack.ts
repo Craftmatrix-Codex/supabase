@@ -30,6 +30,51 @@ import { isCancellationRejectionReason, buildSentryClientOptions } from '@/lib/s
 
 let isInitialized = false
 let cancellationBoundaryInstalled = false
+let telemetryBoundaryInstalled = false
+
+function reportTelemetry(event: Record<string, unknown>) {
+  if (typeof window === 'undefined') return
+
+  void fetch('/api/telemetry', {
+    method: 'POST',
+    credentials: 'include',
+    keepalive: true,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      source: 'browser',
+      release: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA,
+      ...event,
+    }),
+  }).catch(() => undefined)
+}
+
+function installTelemetryBoundary() {
+  if (telemetryBoundaryInstalled || typeof window === 'undefined') return
+  telemetryBoundaryInstalled = true
+
+  window.addEventListener('error', (event) => {
+    reportTelemetry({
+      event_type: 'uncaught_error',
+      error_class: event.error?.name || 'ErrorEvent',
+      message: event.error?.message || event.message || 'Unknown browser error',
+      stack_trace: event.error?.stack,
+      route: window.location.pathname,
+      context: { filename: event.filename, line: event.lineno, column: event.colno },
+    })
+  })
+
+  window.addEventListener('unhandledrejection', (event) => {
+    if (isCancellationRejectionReason(event.reason)) return
+    const reason = event.reason instanceof Error ? event.reason : undefined
+    reportTelemetry({
+      event_type: 'unhandled_rejection',
+      error_class: reason?.name || 'UnhandledRejection',
+      message: reason?.message || String(event.reason || 'Unknown promise rejection'),
+      stack_trace: reason?.stack,
+      route: window.location.pathname,
+    })
+  })
+}
 
 function installCancellationBoundary() {
   if (cancellationBoundaryInstalled || typeof window === 'undefined') return
@@ -45,6 +90,7 @@ export function initSentryTanStackClient(router: AnyRouter) {
   // sentry.server.config.ts equivalent would live in a custom server entry).
   if (typeof window === 'undefined') return
   installCancellationBoundary()
+  installTelemetryBoundary()
   // getRouter() is called once per pageload today; keep the guard so a future
   // second call can't double-init the client.
   if (isInitialized) return

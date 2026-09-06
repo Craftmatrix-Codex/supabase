@@ -10,6 +10,8 @@ Route::middleware('studio.auth')
     ->withoutMiddleware([PreventRequestForgery::class])
     ->group(function (): void {
     Route::get('/api/get-utc-time', [StudioController::class, 'utcTime']);
+    Route::post('/api/telemetry', [StudioController::class, 'recordTelemetry']);
+    Route::get('/api/platform/telemetry', [StudioController::class, 'telemetryEvents']);
     Route::get('/api/get-deployment-commit', [StudioController::class, 'deploymentCommit']);
     Route::get('/api/enabled-features-overrides', [StudioController::class, 'featureOverrides']);
     Route::get('/api/cli-release-version', [StudioController::class, 'cliReleaseVersion']);
