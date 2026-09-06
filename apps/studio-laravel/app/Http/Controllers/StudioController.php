@@ -27,7 +27,7 @@ class StudioController
 
     public function apiRest(string $project): JsonResponse
     {
-        $this->assertProject($project);
+        $this->projectRecord($project);
         return response()->json([]);
     }
 
@@ -72,18 +72,21 @@ class StudioController
 
     public function project(string $project): JsonResponse
     {
-        $this->assertProject($project);
-        $record = collect(config('studio.projects', []))->firstWhere('ref', $project);
+        $record = $this->projectRecord($project);
+        $restUrl = $this->projectRestUrl($record);
+        unset($record['scope']);
 
         return response()->json(array_merge($record, [
             'connectionString' => '',
-            'restUrl' => config('studio.rest_url'),
+            'restUrl' => $restUrl,
         ]));
     }
 
     public function profile(): JsonResponse
     {
         $project = $this->projectRecord('default');
+        $publicProject = $project;
+        unset($publicProject['scope']);
 
         return response()->json([
             'id' => 1,
@@ -96,7 +99,7 @@ class StudioController
                 'name' => env('DEFAULT_ORGANIZATION_NAME', 'Default Organization'),
                 'slug' => 'default-org-slug',
                 'billing_email' => 'billing@supabase.co',
-                'projects' => [array_merge($project, ['connectionString' => ''])],
+                'projects' => [array_merge($publicProject, ['connectionString' => ''])],
             ]],
         ]);
     }
@@ -128,20 +131,21 @@ class StudioController
 
     public function databases(string $project): JsonResponse
     {
-        $this->assertProject($project);
+        $record = $this->projectRecord($project);
+        $database = $record['scope']['database'] ?? [];
 
         return response()->json([[
             'cloud_provider' => 'localhost',
             'connectionString' => '',
             'connection_string_read_only' => '',
             'db_host' => config('studio.db_host'),
-            'db_name' => 'postgres',
+            'db_name' => $database['name'] ?? 'postgres',
             'db_port' => config('studio.db_port'),
-            'db_user' => 'postgres',
+            'db_user' => $database['role'] ?? 'postgres',
             'identifier' => $project,
             'inserted_at' => '',
             'region' => 'local',
-            'restUrl' => config('studio.rest_url'),
+            'restUrl' => $this->projectRestUrl($record),
             'size' => '',
             'status' => 'ACTIVE_HEALTHY',
         ]]);
@@ -161,19 +165,19 @@ class StudioController
 
     public function projects(): JsonResponse
     {
-        return response()->json(config('studio.projects', []));
+        return response()->json(array_map(fn (array $project): array => $this->publicProject($project), $this->projectRecords()));
     }
 
     public function currentProject(): JsonResponse
     {
-        $project = collect(config('studio.projects', []))->firstWhere('current', true);
+        $project = collect($this->projectRecords())->firstWhere('current', true);
 
-        return response()->json(['project' => $project]);
+        return response()->json(['project' => is_array($project) ? $this->publicProject($project) : null]);
     }
 
     public function runLints(string $project): JsonResponse
     {
-        abort_unless(collect(config('studio.projects', []))->contains('ref', $project), 404);
+        $this->projectRecord($project);
 
         return response()->json([]);
     }
@@ -229,25 +233,27 @@ class StudioController
 
     public function settings(string $project): JsonResponse
     {
-        $this->assertProject($project);
+        $record = $this->projectRecord($project);
+        $database = $record['scope']['database'] ?? [];
+        $endpoint = $this->projectEndpoint($record);
 
         return response()->json([
             'app_config' => [
                 'db_schema' => 'public',
-                'endpoint' => config('studio.project_endpoint', 'http://localhost'),
-                'storage_endpoint' => config('studio.project_endpoint', 'http://localhost'),
+                'endpoint' => $endpoint,
+                'storage_endpoint' => $endpoint,
                 'protocol' => 'http',
             ],
             'cloud_provider' => 'local',
             'db_dns_name' => '-',
             'db_host' => config('database.connections.pgsql.host', 'localhost'),
             'db_ip_addr_config' => 'legacy',
-            'db_name' => config('database.connections.pgsql.database', 'postgres'),
+            'db_name' => $database['name'] ?? config('database.connections.pgsql.database', 'postgres'),
             'db_port' => (int) config('database.connections.pgsql.port', 5432),
-            'db_user' => config('database.connections.pgsql.username', 'postgres'),
-            'inserted_at' => now()->toIso8601String(),
+            'db_user' => $database['role'] ?? config('database.connections.pgsql.username', 'postgres'),
+            'inserted_at' => $record['inserted_at'] ?? now()->toIso8601String(),
             'jwt_secret' => '',
-            'name' => config('studio.projects.0.name', 'Default Project'),
+            'name' => $record['name'],
             'ref' => $project,
             'region' => 'local',
             'service_api_keys' => [
@@ -271,7 +277,7 @@ class StudioController
 
     private function projectRecord(string $project): array
     {
-        $record = collect(config('studio.projects', []))->firstWhere('ref', $project);
+        $record = collect($this->projectRecords())->firstWhere('ref', $project);
         abort_unless(is_array($record), 404);
 
         return $record;
@@ -279,6 +285,72 @@ class StudioController
 
     private function assertProject(string $project): void
     {
-        abort_unless(collect(config('studio.projects', []))->contains('ref', $project), 404);
+        $this->projectRecord($project);
+    }
+
+    private function publicProject(array $project): array
+    {
+        unset($project['scope']);
+        return $project;
+    }
+
+    private function projectRecords(): array
+    {
+        $configured = array_values(array_filter(config('studio.projects', []), 'is_array'));
+        $path = config('studio.registry_path');
+        if (! is_string($path) || ! is_file($path)) {
+            return $configured;
+        }
+
+        $decoded = json_decode((string) file_get_contents($path), true);
+        if (! is_array($decoded) || ! is_array($decoded['projects'] ?? null)) {
+            return $configured;
+        }
+
+        $currentId = is_string($decoded['currentProjectId'] ?? null) ? $decoded['currentProjectId'] : null;
+        $records = [];
+        foreach ($decoded['projects'] as $project) {
+            if (! is_array($project) || ! is_string($project['id'] ?? null)) {
+                continue;
+            }
+            $id = $project['id'];
+            $records[] = [
+                'id' => $id,
+                'ref' => $id,
+                'name' => is_string($project['name'] ?? null) ? $project['name'] : $id,
+                'organization_id' => 1,
+                'cloud_provider' => 'localhost',
+                'status' => is_string($project['status'] ?? null) ? $project['status'] : 'registered',
+                'region' => 'local',
+                'inserted_at' => $project['createdAt'] ?? '',
+                'current' => $currentId !== null ? $id === $currentId : (bool) ($project['current'] ?? false),
+                'scope' => is_array($project['scope'] ?? null) ? $project['scope'] : [],
+            ];
+        }
+
+        $known = array_column($records, 'ref');
+        foreach ($configured as $fallback) {
+            if (! in_array($fallback['ref'] ?? null, $known, true)) {
+                $fallback['current'] = $currentId !== null
+                    ? ($fallback['ref'] ?? null) === $currentId
+                    : (bool) ($fallback['current'] ?? false);
+                $records[] = $fallback;
+            }
+        }
+
+        return $records;
+    }
+
+    private function projectRestUrl(array $record): string
+    {
+        return rtrim($this->projectEndpoint($record), '/') . '/rest/v1';
+    }
+
+    private function projectEndpoint(array $record): string
+    {
+        $publicUrl = $record['scope']['publicUrl'] ?? null;
+        return is_string($publicUrl) && $publicUrl !== ''
+            ? $publicUrl
+            : (string) config('studio.project_endpoint', 'http://localhost');
     }
 }
