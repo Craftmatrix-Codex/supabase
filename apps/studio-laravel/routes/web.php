@@ -28,6 +28,7 @@ Route::middleware('studio.auth')->group(function (): void {
     Route::match(['get', 'post'], '/api/platform/projects/{project}/run-lints', [StudioController::class, 'runLints']);
     Route::post('/api/platform/pg-meta/{project}/query', [StudioController::class, 'pgMetaQuery']);
     Route::get('/api/platform/projects/{project}/content/count', [StudioController::class, 'contentCount']);
+    Route::get('/api/platform/projects/{project}/content/folders', [StudioController::class, 'contentFolders']);
     Route::get('/api/platform/projects/{project}/content', [StudioController::class, 'content']);
     Route::get('/api/platform/storage/{project}/buckets', [StudioController::class, 'emptyArray']);
     Route::get('/api/platform/storage/{project}/vector-buckets', [StudioController::class, 'emptyArray']);

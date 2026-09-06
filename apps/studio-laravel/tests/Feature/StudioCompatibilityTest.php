@@ -53,6 +53,16 @@ class StudioCompatibilityTest extends TestCase
             ->assertExactJson(['shared' => 0, 'favorites' => 0, 'private' => 0]);
     }
 
+    public function test_content_folders_returns_the_native_empty_state_contract(): void
+    {
+        $this->auth()->getJson('/api/platform/projects/default/content/folders?type=sql&limit=100')
+            ->assertOk()
+            ->assertExactJson([
+                'data' => ['folders' => [], 'contents' => []],
+                'cursor' => null,
+            ]);
+    }
+
     public function test_management_surfaces_return_successful_empty_arrays(): void
     {
         foreach ([

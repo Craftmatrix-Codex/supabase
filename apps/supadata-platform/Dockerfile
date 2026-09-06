@@ -46,8 +46,7 @@ FROM laravel-deps AS laravel-build
 COPY apps/studio-laravel/ ./
 COPY --from=laravel-deps /app/vendor ./vendor
 RUN rm -f bootstrap/cache/*.php && \
-    composer dump-autoload --no-dev --optimize --no-scripts && \
-    php artisan package:discover --ansi
+    composer dump-autoload --no-dev --optimize --no-scripts
 COPY --from=studio-build /app/apps/studio/dist/client /tmp/studio-client
 RUN STUDIO_CLIENT_SOURCE=/tmp/studio-client ./scripts/sync-studio-client.sh
 

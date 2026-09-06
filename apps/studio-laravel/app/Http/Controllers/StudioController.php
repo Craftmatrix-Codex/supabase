@@ -210,6 +210,16 @@ class StudioController
         return response()->json(['shared' => 0, 'favorites' => 0, 'private' => 0]);
     }
 
+    public function contentFolders(string $project): JsonResponse
+    {
+        $this->assertProject($project);
+
+        return response()->json([
+            'data' => ['folders' => [], 'contents' => []],
+            'cursor' => null,
+        ]);
+    }
+
     public function emptyArray(string $project): JsonResponse
     {
         $this->assertProject($project);
