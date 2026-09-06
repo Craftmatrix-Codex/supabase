@@ -231,7 +231,7 @@ func (s *Store) writeLocked(current state) error {
 	}
 	temporaryName := temporary.Name()
 	defer os.Remove(temporaryName)
-	if err := temporary.Chmod(0o600); err != nil {
+	if err := temporary.Chmod(0o640); err != nil {
 		temporary.Close()
 		return fmt.Errorf("protect registry temp file: %w", err)
 	}

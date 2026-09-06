@@ -1,7 +1,10 @@
 #!/bin/sh
 set -eu
 
-mkdir -p "${SUPADATA_DATA_DIR:-/var/lib/supadata}"
+data_dir="${SUPADATA_DATA_DIR:-/var/lib/supadata}"
+mkdir -p "$data_dir"
+chown -R www-data:www-data "$data_dir" 2>/dev/null || true
+chmod 2770 "$data_dir" 2>/dev/null || true
 
 /usr/local/bin/supadata-platform &
 go_pid=$!

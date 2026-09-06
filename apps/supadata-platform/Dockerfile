@@ -56,7 +56,8 @@ RUN apt-get update -qq && \
     docker-php-ext-install mbstring pdo_pgsql opcache && \
     rm -rf /var/lib/apt/lists/* && \
     printf '\n; Pass Coolify runtime variables through to Laravel workers.\nclear_env = no\n' >> /usr/local/etc/php-fpm.d/www.conf && \
-    mkdir -p /var/lib/supadata /var/www/studio
+    mkdir -p /var/lib/supadata /var/www/studio && \
+    chown -R www-data:www-data /var/lib/supadata
 COPY --from=go-build /out/supadata-platform /usr/local/bin/supadata-platform
 COPY --from=laravel-build /app /var/www/studio
 COPY apps/supadata-platform/nginx.conf /etc/nginx/nginx.conf

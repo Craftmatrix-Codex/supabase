@@ -52,8 +52,10 @@ func TestRegistryPersistsProjectsAndCurrentSelection(t *testing.T) {
 	if current == nil || current.ID != "first-project" {
 		t.Fatalf("unexpected current project after reload: %+v", current)
 	}
-	if _, err := os.Stat(filepath.Join(dataDir, "registry.json")); err != nil {
+	if info, err := os.Stat(filepath.Join(dataDir, "registry.json")); err != nil {
 		t.Fatalf("registry file was not persisted: %v", err)
+	} else if info.Mode().Perm() != 0o640 {
+		t.Fatalf("registry file mode = %v, want 0640", info.Mode().Perm())
 	}
 }
 
