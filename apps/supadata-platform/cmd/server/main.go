@@ -31,6 +31,11 @@ func main() {
 		slog.Error("initialize registry", "error", err)
 		os.Exit(1)
 	}
+	databaseHost, databasePort, databaseName, databaseUser, connectionString := cfg.PublicDatabaseDetails()
+	if err := store.SetPublicDatabaseMetadata(databaseHost, databasePort, databaseName, databaseUser, connectionString); err != nil {
+		slog.Error("initialize public database metadata", "error", err)
+		os.Exit(1)
+	}
 
 	projects, err := store.ListProjects(context.Background())
 	if err != nil {

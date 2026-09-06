@@ -18,9 +18,14 @@ import (
 var projectIDPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 type Options struct {
-	DataDir     string
-	PublicHost  string
-	Provisioner Provisioner
+	DataDir                string
+	PublicHost             string
+	PublicDatabaseHost     string
+	PublicDatabasePort     int
+	PublicDatabaseName     string
+	PublicDatabaseUser     string
+	PublicConnectionString string
+	Provisioner            Provisioner
 }
 
 type Provisioner interface {
@@ -33,11 +38,16 @@ type state struct {
 }
 
 type Store struct {
-	registryPath string
-	projectsDir  string
-	publicHost   string
-	provisioner  Provisioner
-	mu           sync.Mutex
+	registryPath           string
+	projectsDir            string
+	publicHost             string
+	publicDatabaseHost     string
+	publicDatabasePort     int
+	publicDatabaseName     string
+	publicDatabaseUser     string
+	publicConnectionString string
+	provisioner            Provisioner
+	mu                     sync.Mutex
 }
 
 func New(options Options) (*Store, error) {
@@ -48,11 +58,56 @@ func New(options Options) (*Store, error) {
 		return nil, fmt.Errorf("create registry directories: %w", err)
 	}
 	return &Store{
-		registryPath: filepath.Join(options.DataDir, "registry.json"),
-		projectsDir:  filepath.Join(options.DataDir, "projects"),
-		publicHost:   strings.TrimSpace(options.PublicHost),
-		provisioner:  options.Provisioner,
+		registryPath:           filepath.Join(options.DataDir, "registry.json"),
+		projectsDir:            filepath.Join(options.DataDir, "projects"),
+		publicHost:             strings.TrimSpace(options.PublicHost),
+		publicDatabaseHost:     options.PublicDatabaseHost,
+		publicDatabasePort:     options.PublicDatabasePort,
+		publicDatabaseName:     options.PublicDatabaseName,
+		publicDatabaseUser:     options.PublicDatabaseUser,
+		publicConnectionString: options.PublicConnectionString,
+		provisioner:            options.Provisioner,
 	}, nil
+}
+
+func (s *Store) SetPublicDatabaseMetadata(host string, port int, name, user, connectionString string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.publicDatabaseHost, s.publicDatabasePort = host, port
+	s.publicDatabaseName, s.publicDatabaseUser = name, user
+	s.publicConnectionString = connectionString
+	current, err := s.readLocked()
+	if err != nil {
+		return err
+	}
+	changed := false
+	for index := range current.Projects {
+		project := &current.Projects[index]
+		if project.ConnectionString == "" {
+			project.ConnectionString = connectionString
+			changed = true
+		}
+		if project.DatabaseHost == "" {
+			project.DatabaseHost = host
+			changed = true
+		}
+		if project.DatabasePort == 0 {
+			project.DatabasePort = port
+			changed = true
+		}
+		if project.DatabaseName == "" {
+			project.DatabaseName = name
+			changed = true
+		}
+		if project.DatabaseUser == "" {
+			project.DatabaseUser = user
+			changed = true
+		}
+	}
+	if changed {
+		return s.writeLocked(current)
+	}
+	return nil
 }
 
 func (s *Store) SetProvisioner(provisioner Provisioner) {
@@ -98,12 +153,17 @@ func (s *Store) CreateProject(ctx context.Context, name, requestedID string) (pr
 		status = "provisioning"
 	}
 	created := project.Project{
-		ID:        id,
-		Name:      cleanName,
-		Status:    status,
-		Current:   len(current.Projects) == 0,
-		Scope:     scope,
-		CreatedAt: time.Now().UTC(),
+		ID:               id,
+		Name:             cleanName,
+		Status:           status,
+		Current:          len(current.Projects) == 0,
+		ConnectionString: s.publicConnectionString,
+		DatabaseHost:     s.publicDatabaseHost,
+		DatabasePort:     s.publicDatabasePort,
+		DatabaseName:     s.publicDatabaseName,
+		DatabaseUser:     s.publicDatabaseUser,
+		Scope:            scope,
+		CreatedAt:        time.Now().UTC(),
 	}
 	current.Projects = append(current.Projects, created)
 	if current.CurrentProjectID == "" {
