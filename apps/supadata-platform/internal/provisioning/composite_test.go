@@ -14,8 +14,8 @@ type recordingDatabaseProvisioner struct {
 	err    error
 }
 
-func (p recordingDatabaseProvisioner) ProvisionDatabase(_ context.Context, scope project.DatabaseScope) error {
-	*p.events = append(*p.events, "database:"+scope.Name)
+func (p recordingDatabaseProvisioner) ProvisionDatabase(_ context.Context, value project.Project) error {
+	*p.events = append(*p.events, "database:"+value.Scope.Database.Name)
 	return p.err
 }
 

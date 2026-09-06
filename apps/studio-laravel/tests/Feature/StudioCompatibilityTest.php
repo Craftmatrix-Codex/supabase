@@ -35,6 +35,17 @@ class StudioCompatibilityTest extends TestCase
             ->assertJsonPath('ref', 'default');
     }
 
+    public function test_project_rest_contract_returns_openapi_schema(): void
+    {
+        $this->auth()->getJson('/api/platform/projects/default/api/rest')
+            ->assertOk()
+            ->assertJsonPath('swagger', '2.0')
+            ->assertJsonStructure([
+                'basePath', 'consumes', 'definitions', 'externalDocs', 'host',
+                'info', 'parameters', 'paths', 'produces', 'schemes',
+            ]);
+    }
+
     public function test_lints_accept_the_native_get_request(): void
     {
         $this->auth()->getJson('/api/platform/projects/default/run-lints')
@@ -63,10 +74,13 @@ class StudioCompatibilityTest extends TestCase
             ]);
     }
 
-    public function test_management_surfaces_return_successful_empty_arrays(): void
+    public function test_management_surfaces_return_native_empty_states(): void
     {
+        $this->auth()->getJson('/api/platform/storage/default/vector-buckets')
+            ->assertOk()
+            ->assertExactJson(['vectorBuckets' => []]);
+
         foreach ([
-            '/api/platform/storage/default/vector-buckets',
             '/api/v1/projects/default/functions',
             '/api/platform/projects/default/analytics/log-drains',
         ] as $uri) {

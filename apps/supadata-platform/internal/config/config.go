@@ -1,6 +1,9 @@
 package config
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"strconv"
 )
@@ -22,6 +25,7 @@ type Config struct {
 	StorageRegion       string
 	StorageUseSSL       bool
 	DatabaseURL         string
+	ProjectDatabaseURLs map[string]string
 	JWTSecret           string
 	AuthIssuer          string
 	AuthAutoConfirm     bool
@@ -41,7 +45,7 @@ func Load() Config {
 		ControlPlaneToken:   os.Getenv("SUPADATA_CONTROL_PLANE_TOKEN"),
 		StudioAuthUsername:  os.Getenv("SUPADATA_STUDIO_AUTH_USERNAME"),
 		StudioAuthPassword:  os.Getenv("SUPADATA_STUDIO_AUTH_PASSWORD"),
-		RequireProjectScope: envBool("SUPADATA_REQUIRE_PROJECT_SCOPE", false),
+		RequireProjectScope: envBool("SUPADATA_REQUIRE_PROJECT_SCOPE", true),
 		AllowedOrigin:       envString("SUPADATA_ALLOWED_ORIGIN", "*"),
 		DatabaseMode:        envString("SUPADATA_DATABASE_MODE", "shared"),
 		StorageMode:         envString("SUPADATA_STORAGE_MODE", "shared"),
@@ -51,6 +55,7 @@ func Load() Config {
 		StorageRegion:       envString("SUPADATA_STORAGE_REGION", "us-east-1"),
 		StorageUseSSL:       envBool("SUPADATA_STORAGE_USE_SSL", false),
 		DatabaseURL:         os.Getenv("DATABASE_URL"),
+		ProjectDatabaseURLs: envStringMap("SUPADATA_PROJECT_DATABASE_URLS"),
 		JWTSecret:           os.Getenv("JWT_SECRET"),
 		AuthIssuer:          envString("GOTRUE_JWT_ISSUER", "https://supabase.craftmatrix.org/auth/v1"),
 		AuthAutoConfirm:     envBool("ENABLE_EMAIL_AUTOCONFIRM", false),
@@ -63,11 +68,48 @@ func Load() Config {
 	}
 }
 
+func (c Config) ResolveProjectDatabaseURLs(projectIDs []string) (map[string]string, error) {
+	resolved := make(map[string]string, len(projectIDs))
+	mode := c.DatabaseMode
+	if mode == "" {
+		mode = "shared"
+	}
+	if mode != "shared" && mode != "per-project" {
+		return nil, errors.New("database mode must be shared or per-project")
+	}
+	for _, projectID := range projectIDs {
+		url := c.ProjectDatabaseURLs[projectID]
+		if url == "" && mode == "shared" {
+			url = c.DatabaseURL
+		}
+		if url == "" {
+			return nil, fmt.Errorf("database URL is not configured for project %q", projectID)
+		}
+		resolved[projectID] = url
+	}
+	if len(projectIDs) == 0 && c.DatabaseURL == "" && len(c.ProjectDatabaseURLs) == 0 {
+		return map[string]string{}, nil
+	}
+	return resolved, nil
+}
+
 func envString(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
 	}
 	return fallback
+}
+
+func envStringMap(key string) map[string]string {
+	value := os.Getenv(key)
+	if value == "" {
+		return map[string]string{}
+	}
+	var parsed map[string]string
+	if err := json.Unmarshal([]byte(value), &parsed); err != nil || parsed == nil {
+		return map[string]string{}
+	}
+	return parsed
 }
 
 func envBool(key string, fallback bool) bool {

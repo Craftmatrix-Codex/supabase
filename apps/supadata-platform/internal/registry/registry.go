@@ -55,6 +55,12 @@ func New(options Options) (*Store, error) {
 	}, nil
 }
 
+func (s *Store) SetProvisioner(provisioner Provisioner) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.provisioner = provisioner
+}
+
 func (s *Store) CreateProject(ctx context.Context, name, requestedID string) (project.Project, error) {
 	s.mu.Lock()
 	cleanName := strings.TrimSpace(name)

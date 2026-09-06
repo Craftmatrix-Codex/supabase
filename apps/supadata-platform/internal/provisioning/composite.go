@@ -13,7 +13,7 @@ var (
 )
 
 type DatabaseProvisioner interface {
-	ProvisionDatabase(context.Context, project.DatabaseScope) error
+	ProvisionDatabase(context.Context, project.Project) error
 }
 
 type StorageProvisioner interface {
@@ -32,7 +32,7 @@ func (c Composite) ProvisionProject(ctx context.Context, value project.Project) 
 	if c.Storage == nil {
 		return ErrStorageProvisionerMissing
 	}
-	if err := c.Database.ProvisionDatabase(ctx, value.Scope.Database); err != nil {
+	if err := c.Database.ProvisionDatabase(ctx, value); err != nil {
 		return err
 	}
 	return c.Storage.EnsureBucket(ctx, value.Scope.Storage.Bucket)

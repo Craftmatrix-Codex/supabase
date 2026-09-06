@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -15,10 +14,13 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/auth"
 	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/config"
+	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/database"
 	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/httpapi"
+	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/provisioning"
 	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/realtime"
 	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/registry"
 	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/rest"
+	platformruntime "github.com/renzaspiras/supabase/apps/supadata-platform/internal/runtime"
 	"github.com/renzaspiras/supabase/apps/supadata-platform/internal/storage"
 )
 
@@ -30,26 +32,27 @@ func main() {
 		os.Exit(1)
 	}
 
-	var database *sql.DB
+	projects, err := store.ListProjects(context.Background())
+	if err != nil {
+		slog.Error("read project registry", "error", err)
+		os.Exit(1)
+	}
+	databaseConnections, err := platformruntime.OpenProjectDatabases(context.Background(), cfg, projects)
+	if err != nil {
+		slog.Error("initialize project databases", "error", err)
+		os.Exit(1)
+	}
+	if databaseConnections != nil {
+		defer databaseConnections.Close()
+	}
+
 	var authService httpapi.AuthService
 	var restHandler http.Handler
 	var storageHandler http.Handler
 	var realtimeHandler http.Handler
-	if cfg.DatabaseURL != "" {
-		database, err = sql.Open("pgx", cfg.DatabaseURL)
-		if err != nil {
-			slog.Error("open PostgreSQL", "error", err)
-			os.Exit(1)
-		}
-		defer database.Close()
-		pingContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		err = database.PingContext(pingContext)
-		cancel()
-		if err != nil {
-			slog.Error("connect to PostgreSQL", "error", err)
-			os.Exit(1)
-		}
-		repository, repositoryErr := auth.NewPostgresRepository(database, "auth")
+	var objectStore *storage.S3Store
+	if databaseConnections != nil && databaseConnections.Primary != nil {
+		repository, repositoryErr := auth.NewPostgresRepository(databaseConnections.Primary, "auth")
 		if repositoryErr != nil {
 			slog.Error("initialize Auth repository", "error", repositoryErr)
 			os.Exit(1)
@@ -61,7 +64,7 @@ func main() {
 			TokenTTL:    time.Hour,
 			AutoConfirm: cfg.AuthAutoConfirm,
 		})
-		restHandler = rest.NewHandler(database, rest.HandlerOptions{APIKeys: rest.APIKeyConfig{Anon: cfg.AnonKey, ServiceRole: cfg.ServiceRoleKey}, JWTSecret: []byte(cfg.JWTSecret), Issuer: cfg.AuthIssuer, Audience: "authenticated"})
+		restHandler = rest.NewHandler(databaseConnections.Primary, rest.HandlerOptions{APIKeys: rest.APIKeyConfig{Anon: cfg.AnonKey, ServiceRole: cfg.ServiceRoleKey}, JWTSecret: []byte(cfg.JWTSecret), Issuer: cfg.AuthIssuer, Audience: "authenticated"})
 	} else {
 		slog.Warn("PostgreSQL is not configured; Auth routes are unavailable")
 	}
@@ -85,6 +88,12 @@ func main() {
 			Audience:  "authenticated",
 		})
 	}
+	if cfg.DatabaseMode == "shared" && databaseConnections != nil && databaseConnections.Primary != nil && objectStore != nil {
+		store.SetProvisioner(provisioning.Composite{
+			Database: database.SharedProvisioner{DB: databaseConnections.Primary, Router: databaseConnections.Router},
+			Storage:  objectStore,
+		})
+	}
 	realtimeHandler = realtime.NewHandler(realtime.HandlerOptions{
 		APIKeys:       realtime.APIKeyConfig{Anon: cfg.AnonKey, ServiceRole: cfg.ServiceRoleKey},
 		JWTSecret:     []byte(cfg.JWTSecret),
@@ -102,6 +111,7 @@ func main() {
 			AllowedOrigin:        cfg.AllowedOrigin,
 			Registry:             store,
 			ProjectResolver:      store,
+			DatabaseResolver:     databaseResolver(databaseConnections),
 			RequireProjectScope:  cfg.RequireProjectScope,
 			Auth:                 authService,
 			APIKeys:              httpapi.APIKeyConfig{Anon: cfg.AnonKey, ServiceRole: cfg.ServiceRoleKey},
@@ -131,6 +141,13 @@ func main() {
 		slog.Error("server stopped", "error", err)
 		os.Exit(1)
 	}
+}
+
+func databaseResolver(connections *platformruntime.DatabaseConnections) database.Resolver {
+	if connections == nil {
+		return nil
+	}
+	return connections.Router
 }
 
 func formatPort(port int) string {

@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use App\Services\StudioContentStore;
+use InvalidArgumentException;
+use RuntimeException;
 
 class StudioController
 {
@@ -27,8 +30,29 @@ class StudioController
 
     public function apiRest(string $project): JsonResponse
     {
-        $this->projectRecord($project);
-        return response()->json([]);
+        $record = $this->projectRecord($project);
+        $endpoint = $this->projectEndpointParts($record);
+
+        return response()->json([
+            'swagger' => '2.0',
+            'info' => [
+                'title' => $record['name'] . ' REST API',
+                'description' => 'Supadata-compatible REST API schema',
+                'version' => '1.0.0',
+            ],
+            'host' => $endpoint['host'],
+            'basePath' => '/rest/v1',
+            'schemes' => [$endpoint['protocol']],
+            'consumes' => ['application/json'],
+            'produces' => ['application/json'],
+            'paths' => [],
+            'definitions' => [],
+            'parameters' => [],
+            'externalDocs' => [
+                'description' => 'Supadata REST API documentation',
+                'url' => rtrim($this->projectEndpoint($record), '/') . '/docs',
+            ],
+        ]);
     }
 
     public function aiSqlCheckApiKey(): JsonResponse
@@ -200,28 +224,94 @@ class StudioController
         return response()->json([]);
     }
 
-    public function content(string $project): JsonResponse
+    public function content(Request $request, string $project, StudioContentStore $store): JsonResponse
     {
         $this->assertProject($project);
-
-        return response()->json(['data' => [], 'cursor' => null]);
+        try {
+            if ($request->isMethod('put')) {
+                return response()->json($store->upsertSnippet($project, $request->json()->all()));
+            }
+            if ($request->isMethod('delete')) {
+                $rawIds = $request->query('ids', '');
+                $ids = is_string($rawIds) ? array_values(array_filter(array_map('trim', explode(',', $rawIds)))) : [];
+                abort_unless($ids !== [], 400, 'Snippet IDs are required');
+                return response()->json($store->deleteSnippets($project, $ids));
+            }
+            return response()->json($store->listSnippets($project, $request->query()));
+        } catch (InvalidArgumentException $exception) {
+            return response()->json(['error' => $exception->getMessage()], 422);
+        }
     }
 
-    public function contentCount(string $project): JsonResponse
+    public function contentItem(string $project, string $id, StudioContentStore $store): JsonResponse
     {
         $this->assertProject($project);
-
-        return response()->json(['shared' => 0, 'favorites' => 0, 'private' => 0]);
+        try {
+            return response()->json($store->getSnippet($project, $id));
+        } catch (RuntimeException) {
+            return response()->json(['message' => 'Content not found.'], 404);
+        }
     }
 
-    public function contentFolders(string $project): JsonResponse
+    public function contentFolders(Request $request, string $project, StudioContentStore $store): JsonResponse
     {
         $this->assertProject($project);
+        try {
+            if ($request->isMethod('post')) {
+                return response()->json($store->createFolder($project, (string) $request->input('name')), 201);
+            }
+            return response()->json($store->listFolderContents($project, $request->query()));
+        } catch (InvalidArgumentException $exception) {
+            return response()->json(['error' => $exception->getMessage()], 422);
+        }
+    }
 
-        return response()->json([
-            'data' => ['folders' => [], 'contents' => []],
-            'cursor' => null,
-        ]);
+    public function contentFolder(string $project, string $id, StudioContentStore $store): JsonResponse
+    {
+        $this->assertProject($project);
+        return response()->json($store->listFolderContents($project, ['folder_id' => $id]));
+    }
+
+    public function contentCount(string $project, StudioContentStore $store): JsonResponse
+    {
+        $this->assertProject($project);
+        $content = $store->listSnippets($project, ['limit' => 1000]);
+        return response()->json(['shared' => 0, 'favorites' => 0, 'private' => count($content['data'])]);
+    }
+
+    public function vectorBuckets(string $project): JsonResponse
+    {
+        $record = $this->projectRecord($project);
+        $vectorBuckets = [];
+        foreach ($this->projectBucketRecords($record) as $bucket) {
+            if (strtoupper((string) ($bucket['type'] ?? '')) !== 'VECTOR') {
+                continue;
+            }
+            $vectorBuckets[] = [
+                'vectorBucketName' => $bucket['name'],
+                'creationTime' => $bucket['created_at'],
+            ];
+        }
+
+        return response()->json(['vectorBuckets' => $vectorBuckets]);
+    }
+
+    public function functions(string $project): JsonResponse
+    {
+        $record = $this->projectRecord($project);
+        $functions = $record['functions'] ?? [];
+        abort_unless(is_array($functions), 500, 'invalid function metadata');
+
+        return response()->json(array_values(array_filter($functions, 'is_array')));
+    }
+
+    public function logDrains(string $project): JsonResponse
+    {
+        $record = $this->projectRecord($project);
+        $logDrains = $record['log_drains'] ?? [];
+        abort_unless(is_array($logDrains), 500, 'invalid log drain metadata');
+
+        return response()->json(array_values(array_filter($logDrains, 'is_array')));
     }
 
     public function emptyArray(string $project): JsonResponse

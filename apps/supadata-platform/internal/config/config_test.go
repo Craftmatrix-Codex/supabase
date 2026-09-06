@@ -46,3 +46,43 @@ func TestLoadReadsS3StorageConfiguration(t *testing.T) {
 		t.Fatalf("Load() did not read storage configuration: %+v", cfg)
 	}
 }
+
+func TestLoadReadsProjectDatabaseRoutingAndFailsClosedByDefault(t *testing.T) {
+	t.Setenv("SUPADATA_REQUIRE_PROJECT_SCOPE", "")
+	t.Setenv("SUPADATA_PROJECT_DATABASE_URLS", `{"alpha":"postgres://alpha","beta":"postgres://beta"}`)
+
+	cfg := Load()
+	if !cfg.RequireProjectScope {
+		t.Fatal("RequireProjectScope must default to true")
+	}
+	if cfg.ProjectDatabaseURLs["alpha"] != "postgres://alpha" || cfg.ProjectDatabaseURLs["beta"] != "postgres://beta" {
+		t.Fatalf("ProjectDatabaseURLs = %#v", cfg.ProjectDatabaseURLs)
+	}
+}
+
+func TestResolveProjectDatabaseURLsRequiresEveryProjectInPerProjectMode(t *testing.T) {
+	cfg := Config{DatabaseMode: "per-project", ProjectDatabaseURLs: map[string]string{"alpha": "postgres://alpha"}}
+	_, err := cfg.ResolveProjectDatabaseURLs([]string{"alpha", "beta"})
+	if err == nil {
+		t.Fatal("per-project mode must reject a missing project database URL")
+	}
+}
+
+func TestResolveProjectDatabaseURLsMapsSharedDatabaseExplicitly(t *testing.T) {
+	cfg := Config{DatabaseMode: "shared", DatabaseURL: "postgres://shared"}
+	urls, err := cfg.ResolveProjectDatabaseURLs([]string{"alpha", "beta"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if urls["alpha"] != "postgres://shared" || urls["beta"] != "postgres://shared" {
+		t.Fatalf("resolved URLs = %#v", urls)
+	}
+}
+
+func TestLoadRejectsInvalidProjectDatabaseRoutingConfiguration(t *testing.T) {
+	t.Setenv("SUPADATA_PROJECT_DATABASE_URLS", "not-json")
+	cfg := Load()
+	if len(cfg.ProjectDatabaseURLs) != 0 {
+		t.Fatalf("invalid routing configuration should be ignored, got %#v", cfg.ProjectDatabaseURLs)
+	}
+}
