@@ -6,6 +6,22 @@ mkdir -p "$data_dir"
 chown -R www-data:www-data "$data_dir" 2>/dev/null || true
 chmod 2770 "$data_dir" 2>/dev/null || true
 
+if [ "${DB_CONNECTION:-sqlite}" = "sqlite" ]; then
+  studio_database="${DB_DATABASE:-$data_dir/studio.sqlite}"
+  if [ "$studio_database" != ":memory:" ]; then
+    mkdir -p "$(dirname "$studio_database")"
+    touch "$studio_database"
+    chown www-data:www-data "$studio_database"
+    chmod 0660 "$studio_database"
+  fi
+fi
+
+if [ "${SUPADATA_RUN_MIGRATIONS:-true}" = "true" ]; then
+  cd /var/www/studio
+  php artisan migrate --force --no-interaction
+  chown -R www-data:www-data storage bootstrap/cache "$data_dir" 2>/dev/null || true
+fi
+
 /usr/local/bin/supadata-platform &
 go_pid=$!
 

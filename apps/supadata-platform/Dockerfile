@@ -53,7 +53,7 @@ RUN STUDIO_CLIENT_SOURCE=/tmp/studio-client ./scripts/sync-studio-client.sh
 FROM php:8.4-fpm-bookworm AS production
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends nginx ca-certificates curl libonig-dev libpq-dev && \
-    docker-php-ext-install mbstring pdo_pgsql opcache && \
+    docker-php-ext-install mbstring pdo_pgsql pdo_sqlite opcache && \
     rm -rf /var/lib/apt/lists/* && \
     printf '\n; Pass Coolify runtime variables through to Laravel workers.\nclear_env = no\n' >> /usr/local/etc/php-fpm.d/www.conf && \
     mkdir -p /var/lib/supadata/content /var/www/studio && \

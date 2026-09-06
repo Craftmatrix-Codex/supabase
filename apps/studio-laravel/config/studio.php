@@ -7,6 +7,7 @@ return [
     'registry_path' => env('SUPADATA_REGISTRY_PATH', env('SUPADATA_DATA_DIR', '/var/lib/supadata') . '/registry.json'),
     'content_path' => env('SUPADATA_CONTENT_PATH', env('SUPADATA_DATA_DIR', '/var/lib/supadata') . '/content'),
     'telemetry_retention_days' => (int) env('SUPADATA_TELEMETRY_RETENTION_DAYS', 30),
+    'database_path' => env('DB_DATABASE', env('SUPADATA_DATA_DIR', '/var/lib/supadata') . '/studio.sqlite'),
     'rest_url' => rtrim(env('SUPABASE_PUBLIC_URL', env('APP_URL', 'http://localhost')), '/') . '/rest/v1',
     'db_host' => env('DB_HOST', 'localhost'),
     'db_port' => (int) env('DB_PORT', 5432),
