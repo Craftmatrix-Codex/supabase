@@ -30,7 +30,7 @@ Route::middleware('studio.auth')->group(function (): void {
     Route::get('/api/platform/projects/{project}/content/count', [StudioController::class, 'contentCount']);
     Route::get('/api/platform/projects/{project}/content/folders', [StudioController::class, 'contentFolders']);
     Route::get('/api/platform/projects/{project}/content', [StudioController::class, 'content']);
-    Route::get('/api/platform/storage/{project}/buckets', [StudioController::class, 'emptyArray']);
+    Route::get('/api/platform/storage/{project}/buckets', [StudioController::class, 'storageBuckets']);
     Route::get('/api/platform/storage/{project}/vector-buckets', [StudioController::class, 'emptyArray']);
     Route::get('/api/v1/projects/{project}/functions', [StudioController::class, 'emptyArray']);
     Route::get('/api/platform/projects/{project}/analytics/log-drains', [StudioController::class, 'emptyArray']);

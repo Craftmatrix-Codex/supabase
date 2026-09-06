@@ -14,7 +14,7 @@ class StudioDynamicProjectTest extends TestCase
             'projects' => [[
                 'id' => 'video-project',
                 'name' => 'Video Project',
-                'status' => 'registered',
+                'status' => 'ready',
                 'current' => true,
                 'createdAt' => '2026-09-06T00:00:00Z',
                 'scope' => [
@@ -31,7 +31,8 @@ class StudioDynamicProjectTest extends TestCase
                 ->getJson('/api/platform/projects')
                 ->assertOk()
                 ->assertJsonPath('0.ref', 'video-project')
-                ->assertJsonPath('0.name', 'Video Project');
+                ->assertJsonPath('0.name', 'Video Project')
+                ->assertJsonPath('0.status', 'ACTIVE_HEALTHY');
 
             $this->withBasicAuth('studio', 'password')
                 ->getJson('/api/platform/projects/video-project')

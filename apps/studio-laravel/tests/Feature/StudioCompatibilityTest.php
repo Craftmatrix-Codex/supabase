@@ -66,7 +66,6 @@ class StudioCompatibilityTest extends TestCase
     public function test_management_surfaces_return_successful_empty_arrays(): void
     {
         foreach ([
-            '/api/platform/storage/default/buckets',
             '/api/platform/storage/default/vector-buckets',
             '/api/v1/projects/default/functions',
             '/api/platform/projects/default/analytics/log-drains',

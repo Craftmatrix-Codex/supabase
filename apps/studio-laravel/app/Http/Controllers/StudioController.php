@@ -231,6 +231,121 @@ class StudioController
         return response()->json([]);
     }
 
+    public function storageBuckets(Request $request, string $project): JsonResponse
+    {
+        $record = $this->projectRecord($project);
+        $buckets = $this->projectBucketRecords($record);
+        $search = trim((string) $request->query('search', ''));
+
+        if ($search !== '') {
+            $buckets = array_values(array_filter($buckets, function (array $bucket) use ($search): bool {
+                return str_contains(strtolower($bucket['id']), strtolower($search))
+                    || str_contains(strtolower($bucket['name']), strtolower($search));
+            }));
+        }
+
+        $sortColumn = $request->query('sortColumn', 'created_at');
+        $sortColumn = is_string($sortColumn) && in_array($sortColumn, ['id', 'name', 'updated_at', 'created_at'], true)
+            ? $sortColumn
+            : 'created_at';
+        $sortOrder = $request->query('sortOrder', 'desc');
+        $sortOrder = is_string($sortOrder) && in_array($sortOrder, ['asc', 'desc'], true)
+            ? $sortOrder
+            : 'desc';
+
+        usort($buckets, function (array $left, array $right) use ($sortColumn, $sortOrder): int {
+            $comparison = strcmp((string) $left[$sortColumn], (string) $right[$sortColumn]);
+            if ($comparison === 0) {
+                $comparison = strcmp($left['id'], $right['id']);
+            }
+
+            return $sortOrder === 'asc' ? $comparison : -$comparison;
+        });
+
+        $limit = $this->boundedQueryInteger($request->query('limit'), 100, 1, 1000);
+        $offset = $this->boundedQueryInteger($request->query('offset'), 0, 0, PHP_INT_MAX);
+
+        return response()->json(array_values(array_slice($buckets, $offset, $limit)));
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function projectBucketRecords(array $record): array
+    {
+        $storage = $record['scope']['storage'] ?? [];
+        $configured = is_array($storage) && is_array($storage['buckets'] ?? null)
+            ? $storage['buckets']
+            : (is_array($record['buckets'] ?? null) ? $record['buckets'] : []);
+
+        if ($configured === []
+            && in_array($record['status'] ?? null, ['ready', 'provisioned', 'ACTIVE_HEALTHY'], true)
+            && is_array($storage)
+            && is_string($storage['bucket'] ?? null)
+            && $storage['bucket'] !== '') {
+            $timestamp = is_string($record['inserted_at'] ?? null) && $record['inserted_at'] !== ''
+                ? $record['inserted_at']
+                : now()->toIso8601String();
+            $configured[] = [
+                'id' => $storage['bucket'],
+                'name' => $storage['bucket'],
+                'owner' => '',
+                'public' => false,
+                'type' => 'STANDARD',
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
+            ];
+        }
+
+        $result = [];
+        foreach ($configured as $bucket) {
+            if (! is_array($bucket) || ! is_string($bucket['id'] ?? null) || $bucket['id'] === '') {
+                continue;
+            }
+
+            $createdAt = is_string($bucket['created_at'] ?? null) && $bucket['created_at'] !== ''
+                ? $bucket['created_at']
+                : (string) ($record['inserted_at'] ?? now()->toIso8601String());
+            $updatedAt = is_string($bucket['updated_at'] ?? null) && $bucket['updated_at'] !== ''
+                ? $bucket['updated_at']
+                : $createdAt;
+            $normalized = [
+                'id' => $bucket['id'],
+                'name' => is_string($bucket['name'] ?? null) && $bucket['name'] !== '' ? $bucket['name'] : $bucket['id'],
+                'owner' => is_string($bucket['owner'] ?? null) ? $bucket['owner'] : '',
+                'public' => (bool) ($bucket['public'] ?? false),
+                'created_at' => $createdAt,
+                'updated_at' => $updatedAt,
+            ];
+            if (is_array($bucket['allowed_mime_types'] ?? null)) {
+                $normalized['allowed_mime_types'] = array_values(array_filter($bucket['allowed_mime_types'], 'is_string'));
+            }
+            if (is_numeric($bucket['file_size_limit'] ?? null) && (int) $bucket['file_size_limit'] >= 0) {
+                $normalized['file_size_limit'] = (int) $bucket['file_size_limit'];
+            }
+            if (is_string($bucket['type'] ?? null) && $bucket['type'] !== '') {
+                $normalized['type'] = $bucket['type'];
+            }
+            $result[] = $normalized;
+        }
+
+        return $result;
+    }
+
+    private function boundedQueryInteger(mixed $value, int $default, int $minimum, int $maximum): int
+    {
+        if (is_array($value)) {
+            $value = $value[0] ?? null;
+        }
+        if (! is_string($value) && ! is_int($value)) {
+            return $default;
+        }
+        $parsed = filter_var($value, FILTER_VALIDATE_INT);
+        if ($parsed === false) {
+            return $default;
+        }
+
+        return min($maximum, max($minimum, (int) $parsed));
+    }
+
     public function settings(string $project): JsonResponse
     {
         $record = $this->projectRecord($project);
@@ -320,7 +435,7 @@ class StudioController
                 'name' => is_string($project['name'] ?? null) ? $project['name'] : $id,
                 'organization_id' => 1,
                 'cloud_provider' => 'localhost',
-                'status' => is_string($project['status'] ?? null) ? $project['status'] : 'registered',
+                'status' => $this->nativeProjectStatus($project['status'] ?? null),
                 'region' => 'local',
                 'inserted_at' => $project['createdAt'] ?? '',
                 'current' => $currentId !== null ? $id === $currentId : (bool) ($project['current'] ?? false),
@@ -339,6 +454,20 @@ class StudioController
         }
 
         return $records;
+    }
+
+    private function nativeProjectStatus(mixed $status): string
+    {
+        if (! is_string($status) || $status === '') {
+            return 'UNKNOWN';
+        }
+
+        return match ($status) {
+            'ready', 'provisioned' => 'ACTIVE_HEALTHY',
+            'registered', 'provisioning', 'starting' => 'COMING_UP',
+            'failed' => 'INIT_FAILED',
+            default => $status,
+        };
     }
 
     private function projectRestUrl(array $record): string
