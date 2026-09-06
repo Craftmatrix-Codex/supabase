@@ -95,6 +95,21 @@ class StudioCompatibilityTest extends TestCase
         }
     }
 
+    public function test_settings_uses_the_configured_database_endpoint_without_exposing_passwords(): void
+    {
+        config()->set('database.connections.pgsql.url', 'postgresql://shared_runtime:super-secret@203.0.113.42:6543/shared_db');
+
+        $this->auth()->getJson('/api/platform/projects/default/settings')
+            ->assertOk()
+            ->assertJsonPath('db_host', '203.0.113.42')
+            ->assertJsonPath('db_port', 6543)
+            ->assertJsonPath('db_user', 'shared_runtime')
+            ->assertJsonPath('db_dns_name', '203.0.113.42')
+            ->assertJsonPath('status', 'ACTIVE_HEALTHY')
+            ->assertJsonPath('connectionString', 'postgresql://shared_runtime:[YOUR-PASSWORD]@203.0.113.42:6543/shared_db')
+            ->assertJsonMissing(['connectionString' => 'postgresql://shared_runtime:super-secret@203.0.113.42:6543/shared_db']);
+    }
+
     public function test_settings_returns_the_native_studio_shape_without_secrets_by_default(): void
     {
         $this->auth()->getJson('/api/platform/projects/default/settings')

@@ -203,21 +203,22 @@ class StudioController
     {
         $record = $this->projectRecord($project);
         $database = $record['scope']['database'] ?? [];
+        $connection = $this->databaseConnectionDetails();
 
         return response()->json([[
-            'cloud_provider' => 'localhost',
-            'connectionString' => '',
-            'connection_string_read_only' => '',
-            'db_host' => config('studio.db_host'),
-            'db_name' => $database['name'] ?? 'postgres',
-            'db_port' => config('studio.db_port'),
-            'db_user' => $database['role'] ?? 'postgres',
+            'cloud_provider' => $connection['host'] !== '' ? 'configured' : 'unconfigured',
+            'connectionString' => $connection['connectionString'],
+            'connection_string_read_only' => $connection['connectionString'],
+            'db_host' => $connection['host'],
+            'db_name' => $database['name'] ?? $connection['database'],
+            'db_port' => $connection['port'],
+            'db_user' => $database['role'] ?? $connection['user'],
             'identifier' => $project,
             'inserted_at' => '',
-            'region' => 'local',
+            'region' => 'configured',
             'restUrl' => $this->projectRestUrl($record),
             'size' => '',
-            'status' => 'ACTIVE_HEALTHY',
+            'status' => $connection['host'] !== '' ? 'ACTIVE_HEALTHY' : 'NOT_CONFIGURED',
         ]]);
     }
 
@@ -496,6 +497,7 @@ class StudioController
         $record = $this->projectRecord($project);
         $database = $record['scope']['database'] ?? [];
         $endpoint = $this->projectEndpointParts($record);
+        $connection = $this->databaseConnectionDetails();
 
         return response()->json([
             'app_config' => [
@@ -504,24 +506,25 @@ class StudioController
                 'storage_endpoint' => $endpoint['host'],
                 'protocol' => $endpoint['protocol'],
             ],
-            'cloud_provider' => 'local',
-            'db_dns_name' => '-',
-            'db_host' => config('database.connections.pgsql.host', 'localhost'),
-            'db_ip_addr_config' => 'legacy',
-            'db_name' => $database['name'] ?? config('database.connections.pgsql.database', 'postgres'),
-            'db_port' => (int) config('database.connections.pgsql.port', 5432),
-            'db_user' => $database['role'] ?? config('database.connections.pgsql.username', 'postgres'),
+            'cloud_provider' => $connection['host'] !== '' ? 'configured' : 'unconfigured',
+            'db_dns_name' => $connection['host'],
+            'db_host' => $connection['host'],
+            'connectionString' => $connection['connectionString'],
+            'db_ip_addr_config' => 'configured',
+            'db_name' => $database['name'] ?? $connection['database'],
+            'db_port' => $connection['port'],
+            'db_user' => $database['role'] ?? $connection['user'],
             'inserted_at' => $record['inserted_at'] ?? now()->toIso8601String(),
             'jwt_secret' => '',
             'name' => $record['name'],
             'ref' => $project,
-            'region' => 'local',
+            'region' => 'configured',
             'service_api_keys' => [
                 ['api_key' => '', 'name' => 'anon key', 'tags' => 'anon'],
                 ['api_key' => '', 'name' => 'service_role key', 'tags' => 'service_role'],
             ],
             'ssl_enforced' => false,
-            'status' => 'ACTIVE_HEALTHY',
+            'status' => $connection['host'] !== '' ? 'ACTIVE_HEALTHY' : 'NOT_CONFIGURED',
         ]);
     }
 
@@ -618,6 +621,44 @@ class StudioController
     private function projectRestUrl(array $record): string
     {
         return rtrim($this->projectEndpoint($record), '/') . '/rest/v1';
+    }
+
+    private function databaseConnectionDetails(): array
+    {
+        $url = (string) (env('DATABASE_URL') ?: env('SUPADATA_DATABASE_URL') ?: config('database.connections.pgsql.url', ''));
+        $parsed = $url !== '' ? parse_url($url) : false;
+        $parsed = is_array($parsed) ? $parsed : [];
+
+        $host = (string) ($parsed['host'] ?? config('database.connections.pgsql.host') ?? env('DB_HOST', env('POSTGRES_HOST', '')));
+        $port = (int) ($parsed['port'] ?? config('database.connections.pgsql.port', env('DB_PORT', env('POSTGRES_PORT', 5432))));
+        $database = rawurldecode((string) ($parsed['path'] ?? ''));
+        $database = ltrim($database, '/');
+        $database = $database !== '' ? $database : (string) (config('database.connections.pgsql.database') ?: env('DB_DATABASE', env('POSTGRES_DB', '')));
+        $user = rawurldecode((string) ($parsed['user'] ?? (config('database.connections.pgsql.username') ?: env('DB_USERNAME', env('POSTGRES_USER', '')))));
+        $scheme = (string) ($parsed['scheme'] ?? 'postgresql');
+
+        $connectionString = '';
+        if ($host !== '' && $database !== '') {
+            $displayHost = str_contains($host, ':') && ! str_starts_with($host, '[') ? '[' . $host . ']' : $host;
+            $displayUser = $user !== '' ? rawurlencode($user) : 'postgres';
+            $connectionString = sprintf(
+                '%s://%s:%s@%s:%d/%s',
+                $scheme,
+                $displayUser,
+                '[YOUR-PASSWORD]',
+                $displayHost,
+                $port > 0 ? $port : 5432,
+                rawurlencode($database),
+            );
+        }
+
+        return [
+            'host' => $host,
+            'port' => $port > 0 ? $port : 5432,
+            'database' => $database,
+            'user' => $user,
+            'connectionString' => $connectionString,
+        ];
     }
 
     private function projectEndpoint(array $record): string
