@@ -3,6 +3,7 @@ package project
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -15,7 +16,8 @@ type DatabaseScope struct {
 }
 
 type StorageScope struct {
-	Bucket string `json:"bucket"`
+	Bucket  string            `json:"bucket"`
+	Buckets []json.RawMessage `json:"buckets,omitempty"`
 }
 
 type ResourceScope struct {

@@ -61,7 +61,9 @@ function createSafeStorage(kind: StorageKind) {
       const store = getBackingStore(kind)
       if (store === null) return []
       try {
-        return Object.keys(store)
+        return Array.from({ length: store.length }, (_, index) => store.key(index)).filter(
+          (key): key is string => key !== null
+        )
       } catch (error) {
         reportFailure(kind, 'keys', '*', error)
         return []

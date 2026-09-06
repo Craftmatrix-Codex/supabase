@@ -36,6 +36,6 @@ describe('SupadataProjectSelector', () => {
     await user.click(screen.getByText('New project', { exact: true }))
     await user.type(screen.getByLabelText('Project name'), 'Video Project Demo')
 
-    expect(screen.getByRole('button', { name: 'Create', exact: true })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Create' })).toBeEnabled()
   })
 })

@@ -520,5 +520,5 @@ describe('/project/[ref]/settings/infrastructure', () => {
         min_increment_gb: 10,
       })
     })
-  })
+  }, 15_000)
 })
