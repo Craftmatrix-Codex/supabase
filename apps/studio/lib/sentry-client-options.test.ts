@@ -5,6 +5,7 @@ import {
   buildSentryClientOptions,
   isBrowserWalletExtensionError,
   isCancellationRejection,
+  isCancellationRejectionReason,
   isChallengeExpiredError,
   isUserAbortedOperation,
 } from './sentry-client-options'
@@ -238,6 +239,17 @@ describe('Sentry beforeSend filtering functions', () => {
       }
 
       expect(isCancellationRejection(event)).toBe(false)
+    })
+  })
+
+  describe('isCancellationRejectionReason', () => {
+    it('recognizes the exact plain-object cancellation payload', () => {
+      expect(isCancellationRejectionReason({ type: 'cancelation', msg: 'operation is manually canceled' })).toBe(true)
+    })
+
+    it('does not match unrelated objects', () => {
+      expect(isCancellationRejectionReason({ type: 'error', msg: 'operation is manually canceled' })).toBe(false)
+      expect(isCancellationRejectionReason(new Error('operation is manually canceled'))).toBe(false)
     })
   })
 

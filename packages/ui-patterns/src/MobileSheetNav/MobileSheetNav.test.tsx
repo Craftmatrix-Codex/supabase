@@ -125,6 +125,14 @@ describe('MobileSheetNav', () => {
     })
   })
 
+  it('provides an accessible dialog name when the sheet is open', async () => {
+    render(<MobileSheetNavWithState />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toHaveAccessibleName('Studio navigation panel')
+    })
+  })
+
   describe('shouldCloseOnViewportResize', () => {
     it('calls onOpenChange(false) when width changes and shouldCloseOnViewportResize is true (default)', () => {
       const onOpenChange = vi.fn()

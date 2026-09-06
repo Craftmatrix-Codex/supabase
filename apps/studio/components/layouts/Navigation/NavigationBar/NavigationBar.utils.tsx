@@ -229,7 +229,7 @@ export const generateOtherRoutes = (
                 ? buildingUrl
                 : IS_PLATFORM
                   ? `/project/${ref}/observability`
-                  : `/project/${ref}/query-performance`),
+                  : `/project/${ref}/observability`),
             shortcutId: SHORTCUT_IDS.NAV_OBSERVABILITY,
           },
         ]

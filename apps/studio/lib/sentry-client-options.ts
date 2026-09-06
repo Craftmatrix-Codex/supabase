@@ -79,6 +79,15 @@ export function isCancellationRejection(event: Sentry.Event): boolean {
   return serialized?.type === 'cancelation'
 }
 
+export function isCancellationRejectionReason(reason: unknown): boolean {
+  return (
+    typeof reason === 'object' &&
+    reason !== null &&
+    (reason as { type?: unknown }).type === 'cancelation' &&
+    (reason as { msg?: unknown }).msg === 'operation is manually canceled'
+  )
+}
+
 // Filter challenge/captcha expired errors (user timeout)
 // These happen when users don't complete captcha in time - expected behavior
 // Example: SUPABASE-APP-ACC

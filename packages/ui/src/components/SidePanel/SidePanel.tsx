@@ -160,6 +160,10 @@ const SidePanel = ({
           }}
           {...props}
         >
+          <Dialog.Title className="sr-only">
+            {typeof header === 'string' ? header : id ? String(id) : 'Side panel'}
+          </Dialog.Title>
+          <Dialog.Description className="sr-only">Side panel content</Dialog.Description>
           {header && (
             <header className="flex items-center space-y-1 py-4 px-4 bg-popover sm:px-6 border-b h-(--header-height)">
               {header}

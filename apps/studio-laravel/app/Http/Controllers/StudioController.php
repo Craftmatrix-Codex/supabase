@@ -182,6 +182,15 @@ class StudioController
         return response()->json([]);
     }
 
+    public function temporaryApiKey(string $project): JsonResponse
+    {
+        $this->assertProject($project);
+
+        return response()->json([
+            'api_key' => (string) env('SUPABASE_SERVICE_KEY', env('SERVICE_ROLE_KEY', '')),
+        ]);
+    }
+
     public function githubAuthorization(): Response
     {
         return new Response('null', 200, ['Content-Type' => 'application/json']);

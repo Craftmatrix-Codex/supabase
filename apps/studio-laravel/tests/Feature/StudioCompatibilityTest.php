@@ -74,6 +74,13 @@ class StudioCompatibilityTest extends TestCase
             ]);
     }
 
+    public function test_temporary_api_key_contract_returns_native_shape(): void
+    {
+        $this->auth()->postJson('/api/platform/projects/default/api-keys/temporary?authorization_exp=3600&claims=%7B%22role%22%3A%22service_role%22%7D')
+            ->assertOk()
+            ->assertJsonStructure(['api_key']);
+    }
+
     public function test_management_surfaces_return_native_empty_states(): void
     {
         $this->auth()->getJson('/api/platform/storage/default/vector-buckets')

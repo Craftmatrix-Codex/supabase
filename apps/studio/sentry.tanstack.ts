@@ -26,15 +26,25 @@
 import * as Sentry from '@sentry/react'
 import type { AnyRouter } from '@tanstack/react-router'
 
-import { buildSentryClientOptions } from '@/lib/sentry-client-options'
+import { isCancellationRejectionReason, buildSentryClientOptions } from '@/lib/sentry-client-options'
 
 let isInitialized = false
+let cancellationBoundaryInstalled = false
+
+function installCancellationBoundary() {
+  if (cancellationBoundaryInstalled || typeof window === 'undefined') return
+  cancellationBoundaryInstalled = true
+  window.addEventListener('unhandledrejection', (event) => {
+    if (isCancellationRejectionReason(event.reason)) event.preventDefault()
+  })
+}
 
 export function initSentryTanStackClient(router: AnyRouter) {
   // Client-only: getRouter() also runs during SSR/prerender, and the TanStack
   // build has no server-side Sentry story yet (the Next build's
   // sentry.server.config.ts equivalent would live in a custom server entry).
   if (typeof window === 'undefined') return
+  installCancellationBoundary()
   // getRouter() is called once per pageload today; keep the guard so a future
   // second call can't double-init the client.
   if (isInitialized) return

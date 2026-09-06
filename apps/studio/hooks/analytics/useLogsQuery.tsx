@@ -20,6 +20,14 @@ import { logsAllEndpointUrl } from '@/data/logs/logs-endpoint'
 import { useIsFeatureEnabled } from '@/hooks/misc/useIsFeatureEnabled'
 import { DOCS_URL } from '@/lib/constants'
 
+export const isLogsQueryCancellation = (error: unknown): boolean => {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { type?: unknown }).type === 'cancelation'
+  )
+}
+
 export interface LogsQueryHook {
   params: LogsEndpointParams
   isLoading: boolean
@@ -81,18 +89,28 @@ export const useLogsQuery = ({
   } = useQuery({
     queryKey: ['projects', projectRef, 'logs', params, { otel: useOtel }],
     queryFn: async ({ signal }) => {
-      const { data, error } = await get(logsAllEndpointUrl(useOtel), {
-        params: {
-          path: { ref: projectRef! },
-          query: params,
-        },
-        signal,
-      })
-      if (error) {
+      try {
+        const { data, error } = await get(logsAllEndpointUrl(useOtel), {
+          params: {
+            path: { ref: projectRef! },
+            query: params,
+          },
+          signal,
+        })
+        if (error) {
+          throw error
+        }
+
+        return data as unknown as Logs
+      } catch (error) {
+        // The logs client throws a plain cancellation object when a stale query
+        // is aborted. TanStack Query handles the stale result itself, but the
+        // raw promise still reaches the browser as an unhandled rejection.
+        if (signal.aborted || isLogsQueryCancellation(error)) {
+          return { result: [] } as unknown as Logs
+        }
         throw error
       }
-
-      return data as unknown as Logs
     },
     enabled: _enabled,
     refetchOnWindowFocus: false,
