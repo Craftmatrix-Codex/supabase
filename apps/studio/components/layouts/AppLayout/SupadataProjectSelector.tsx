@@ -61,7 +61,8 @@ export function SupadataProjectSelector({
   const [selectedId, setSelectedId] = useState(currentId ?? '')
   const [isLoading, setIsLoading] = useState(true)
   const [isSelecting, setIsSelecting] = useState(false)
-  const [isCreating, setIsCreating] = useState(false)
+  const [isCreateFormOpen, setIsCreateFormOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [name, setName] = useState('')
   const [id, setId] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -162,7 +163,7 @@ export function SupadataProjectSelector({
   async function createProject(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!name.trim()) return
-    setIsCreating(true)
+    setIsSubmitting(true)
     setError(null)
     try {
       const response = await fetch(`${proxyPath}/projects`, {
@@ -183,7 +184,7 @@ export function SupadataProjectSelector({
     } catch (createError: unknown) {
       setError(createError instanceof Error ? createError.message : 'Failed to create project')
     } finally {
-      setIsCreating(false)
+      setIsSubmitting(false)
     }
   }
 
@@ -202,7 +203,7 @@ export function SupadataProjectSelector({
             role="combobox"
             aria-expanded={open}
             aria-label="Select Supadata project"
-            disabled={isLoading || isSelecting || isCreating}
+            disabled={isLoading || isSelecting || isSubmitting}
             className="h-8 min-w-[170px] max-w-[260px] justify-between gap-3 px-2.5 text-sm font-normal"
             title={error ?? 'Select Supadata project'}
           >
@@ -214,7 +215,7 @@ export function SupadataProjectSelector({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[280px] p-0" align="start" sideOffset={6}>
-          {isCreating ? (
+          {isCreateFormOpen ? (
             <form onSubmit={createProject} className="space-y-3 p-3">
               <div className="text-sm font-medium">New Supadata project</div>
               <input
@@ -238,11 +239,16 @@ export function SupadataProjectSelector({
                   type="button"
                   size="tiny"
                   variant="default"
-                  onClick={() => setIsCreating(false)}
+                  onClick={() => setIsCreateFormOpen(false)}
                 >
                   Cancel
                 </Button>
-                <Button type="submit" size="tiny" loading={isCreating} disabled={!name.trim()}>
+                <Button
+                  type="submit"
+                  size="tiny"
+                  loading={isSubmitting}
+                  disabled={!name.trim() || isSubmitting}
+                >
                   Create
                 </Button>
               </div>
@@ -287,7 +293,7 @@ export function SupadataProjectSelector({
                       <span>Credentials</span>
                     </CommandItem>
                   )}
-                  <CommandItem onSelect={() => setIsCreating(true)} className="gap-2">
+                  <CommandItem onSelect={() => setIsCreateFormOpen(true)} className="gap-2">
                     <Plus size={14} />
                     <span>New project</span>
                   </CommandItem>
