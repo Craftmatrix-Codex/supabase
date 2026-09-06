@@ -629,12 +629,21 @@ class StudioController
         $parsed = $url !== '' ? parse_url($url) : false;
         $parsed = is_array($parsed) ? $parsed : [];
 
-        $host = (string) ($parsed['host'] ?? config('database.connections.pgsql.host') ?? env('DB_HOST', env('POSTGRES_HOST', '')));
-        $port = (int) ($parsed['port'] ?? config('database.connections.pgsql.port', env('DB_PORT', env('POSTGRES_PORT', 5432))));
+        $configuredHost = (string) (env('SUPADATA_PUBLIC_DATABASE_HOST') ?: env('DB_HOST') ?: env('POSTGRES_HOST'));
+        $configuredPort = (int) (env('SUPADATA_PUBLIC_DATABASE_PORT') ?: env('DB_PORT') ?: env('POSTGRES_PORT') ?: 0);
+        $configuredDatabase = (string) (env('SUPADATA_PUBLIC_DATABASE_NAME') ?: env('DB_DATABASE') ?: env('POSTGRES_DB'));
+        $configuredUser = (string) (env('SUPADATA_PUBLIC_DATABASE_USER') ?: env('DB_USERNAME') ?: env('POSTGRES_USER'));
+        $configHost = (string) config('database.connections.pgsql.host', '');
+        $configPort = (int) config('database.connections.pgsql.port', 0);
+        $configDatabase = (string) config('database.connections.pgsql.database', '');
+        $configUser = (string) config('database.connections.pgsql.username', '');
+
+        $host = (string) ($parsed['host'] ?? ($configuredHost !== '' ? $configuredHost : ($configHost !== 'localhost' ? $configHost : '')));
+        $port = (int) ($parsed['port'] ?? ($configuredPort > 0 ? $configuredPort : ($configPort > 0 ? $configPort : 5432)));
         $database = rawurldecode((string) ($parsed['path'] ?? ''));
         $database = ltrim($database, '/');
-        $database = $database !== '' ? $database : (string) (config('database.connections.pgsql.database') ?: env('DB_DATABASE', env('POSTGRES_DB', '')));
-        $user = rawurldecode((string) ($parsed['user'] ?? (config('database.connections.pgsql.username') ?: env('DB_USERNAME', env('POSTGRES_USER', '')))));
+        $database = $database !== '' ? $database : ($configuredDatabase !== '' ? $configuredDatabase : $configDatabase);
+        $user = rawurldecode((string) ($parsed['user'] ?? ($configuredUser !== '' ? $configuredUser : $configUser)));
         $scheme = (string) ($parsed['scheme'] ?? 'postgresql');
 
         $connectionString = '';
