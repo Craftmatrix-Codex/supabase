@@ -1,11 +1,14 @@
 <?php
 
 use App\Http\Controllers\StudioController;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', [StudioController::class, 'health']);
 
-Route::middleware('studio.auth')->group(function (): void {
+Route::middleware('studio.auth')
+    ->withoutMiddleware([PreventRequestForgery::class])
+    ->group(function (): void {
     Route::get('/api/get-utc-time', [StudioController::class, 'utcTime']);
     Route::get('/api/get-deployment-commit', [StudioController::class, 'deploymentCommit']);
     Route::get('/api/enabled-features-overrides', [StudioController::class, 'featureOverrides']);
